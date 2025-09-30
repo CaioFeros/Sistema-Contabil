@@ -1,0 +1,28 @@
+# Arquivos de ambiente - NUNCA envie para o repositório!
+.env
+*.env.local
+
+# Dependências do Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Dependências do Node.js
+frontend/node_modules/
+
+# Arquivos de build e logs do frontend
+frontend/dist/
+frontend/.pnp
+frontend/.pnp.js
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Arquivos de IDE
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
