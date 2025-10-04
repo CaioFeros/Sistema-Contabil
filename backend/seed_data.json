@@ -1,0 +1,30 @@
+{
+  "clientes": [
+    {
+      "razao_social": "Empresa Exemplo Ltda",
+      "cnpj": "01.123.456/0001-11",
+      "regime_tributario": "Lucro Presumido"
+    },
+    {
+      "razao_social": "Soluções Tech S.A.",
+      "cnpj": "02.987.654/0001-22",
+      "regime_tributario": "Lucro Real"
+    },
+    {
+      "razao_social": "Inova Simples ME",
+      "cnpj": "03.456.789/0001-33",
+      "regime_tributario": "Simples Nacional"
+    },
+    {
+      "razao_social": "Consultoria Alfa EIRELI",
+      "cnpj": "04.111.222/0001-44",
+      "regime_tributario": "Lucro Presumido"
+    },
+    {
+      "razao_social": "Comércio Varejista Delta",
+      "cnpj": "05.333.444/0001-55",
+      "regime_tributario": "Simples Nacional"
+    }
+  ],
+  "faturamento_exemplo": {}
+}

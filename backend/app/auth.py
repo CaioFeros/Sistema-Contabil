@@ -11,6 +11,16 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # --- BYPASS DE DESENVOLVIMENTO ---
+        # Se o FLASK_DEBUG estiver ativo, pulamos a validação do token.
+        if os.environ.get('FLASK_DEBUG') == '1':
+            # Usamos o primeiro usuário do banco como o 'current_user' para as rotas.
+            # Isso requer que o comando 'seed-db' tenha sido executado pelo menos uma vez.
+            dev_user = Usuario.query.first()
+            if not dev_user:
+                return jsonify({"erro": "Modo de desenvolvimento ativo, mas nenhum usuário encontrado no banco. Execute 'flask seed-db'."}), 500
+            return f(dev_user, *args, **kwargs)
+
         token = None
         if 'Authorization' in request.headers:
             auth_header = request.headers['Authorization']

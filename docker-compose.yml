@@ -10,7 +10,8 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      # Mapeia a porta 5432 do contêiner para a porta 5433 da sua máquina para evitar conflitos.
+      - "5433:5432"
 
   backend:
     build:
@@ -29,6 +30,11 @@ services:
       - FLASK_DEBUG=1
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    # Adiciona um comando para esperar o banco de dados ficar pronto antes de iniciar o Flask.
+    # Isso evita que o backend falhe ao iniciar se o banco de dados ainda não estiver pronto.
+    # Requer que 'wait-for-it.sh' esteja na pasta 'backend'.
+    # (Você precisará criar este arquivo)
+    command: sh -c "./wait-for-it.sh db:5432 -- flask run --host=0.0.0.0"
 
   frontend:
     image: node:20-alpine

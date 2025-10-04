@@ -1,42 +1,46 @@
 import os
 from flask import Flask
 from flask_migrate import Migrate
-from dotenv import load_dotenv
-from .models import db
 from flask_cors import CORS
+from .models import db
 from .auth import auth_bp
 from .routes import api_bp
+import seed
 
 migrate = Migrate()
 
-# Carrega as variáveis de ambiente do arquivo .env
-# Esta é a única chamada necessária.
-load_dotenv()
+def create_app():
+    """
+    Cria e configura uma instância da aplicação Flask.
+    Este é o padrão Application Factory.
+    """
+    app = Flask(__name__)
 
-# Cria a instância da aplicação Flask
-app = Flask(__name__)
+    # Carrega a configuração a partir de variáveis de ambiente
+    # Garante que as variáveis de ambiente sejam carregadas antes de serem usadas.
+    # A chamada a load_dotenv() deve estar no seu arquivo de entrada (ex: run.py)
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
 
-# Configura o CORS para permitir requisições do frontend
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+    # Configura o CORS de forma flexível
+    frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+    CORS(app, resources={r"/api/*": {"origins": frontend_url}})
 
-# Configuração do Banco de Dados e JWT a partir das variáveis de ambiente
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
+    # Inicializa as extensões com a aplicação
+    db.init_app(app)
+    migrate.init_app(app, db)
 
-# Inicializa as extensões com a aplicação
-db.init_app(app)
-migrate.init_app(app, db)
+    # Registra os Blueprints com prefixo de URL
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(api_bp)
 
-# Registra os Blueprints (conjuntos de rotas)
-app.register_blueprint(auth_bp)
-app.register_blueprint(api_bp)
+    # Registra comandos customizados do Flask (como o 'seed-db')
+    seed.register_commands(app)
 
-@app.route("/")
-def hello_world():
-    """Rota de teste inicial."""
-    return {"mensagem": "Olá, Mundo! O backend está no ar."}
+    @app.route("/")
+    def hello_world():
+        """Rota de teste inicial."""
+        return {"mensagem": "Olá, Mundo! O backend está no ar."}
 
-# Registra comandos customizados do Flask (como o 'seed-db')
-from . import seed
-seed.register_commands(app)
+    return app

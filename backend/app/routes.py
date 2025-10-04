@@ -1,32 +1,13 @@
 import pandas as pd
-from flask import request, jsonify, Blueprint
+from flask import request, jsonify, Blueprint, current_app
+import jwt
+from datetime import datetime
 from .models import db, Cliente, Processamento, FaturamentoDetalhe
-from sqlalchemy import func
-from datetime import datetime, timedelta
+from sqlalchemy.orm import joinedload
 from .auth import token_required
-from .services import calcular_impostos # 1. Importe a nova função
+from .services import processar_arquivo_faturamento, gerar_relatorio_faturamento
 
 api_bp = Blueprint('api', __name__, url_prefix='/api') # Blueprint principal da API
-
-@api_bp.route("/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
-    # Apenas para fins de teste e desenvolvimento.
-    # Em produção, você buscaria o usuário no banco de dados e verificaria a senha.
-    if username == "admin" and password == "admin":
-        # Gera um token JWT com validade de 24 horas
-        expires = datetime.utcnow() + timedelta(hours=24)
-        token = jwt.encode({'user': username, 'exp': expires}, current_app.config['JWT_SECRET_KEY'], algorithm="HS256")
-        return jsonify({'access_token': token}), 200
-    else:
-        return jsonify({"erro": "Credenciais inválidas"}), 401
-
-# Importe jwt e current_app no topo do arquivo
-from flask import current_app
-import jwt
 
 @api_bp.route("/clientes", methods=["POST"])
 @token_required
@@ -69,8 +50,8 @@ def get_clientes(current_user):
 @token_required
 def get_processamentos(current_user):
     # Inicia a query base
-    query = Processamento.query
-
+    # Otimização: usa joinedload para evitar o problema N+1
+    query = Processamento.query.options(joinedload(Processamento.cliente))
     # Obtém os parâmetros de filtro da URL (ex: ?cliente_id=1&ano=2024)
     cliente_id = request.args.get('cliente_id')
     mes = request.args.get('mes')
@@ -100,156 +81,74 @@ def get_processamentos(current_user):
 
     return jsonify(resultado)
 
-@api_bp.route("/relatorios/anual", methods=["GET"])
+@api_bp.route("/relatorios/faturamento", methods=["GET"])
 @token_required
-def get_relatorio_anual(current_user):
+def get_relatorio_faturamento(current_user):
     """
-    Gera um relatório anual consolidado para um cliente específico.
+    Gera um relatório de faturamento consolidado para um cliente com base em diferentes filtros de período.
+    Filtros possíveis: 'ano', 'mes', 'periodo', 'ultimos_12_meses'.
     """
-    # 1. Obter e validar parâmetros da requisição
-    cliente_id = request.args.get('cliente_id')
-    ano = request.args.get('ano')
-
-    if not cliente_id or not ano:
-        return jsonify({"erro": "Os parâmetros 'cliente_id' e 'ano' são obrigatórios."}), 400
-
     try:
-        cliente_id_int = int(cliente_id)
-        ano_int = int(ano)
-    except ValueError:
-        return jsonify({"erro": "'cliente_id' e 'ano' devem ser números inteiros."}), 400
+        # Validação básica dos parâmetros de entrada
+        if not request.args.get('cliente_id'):
+            return jsonify({"erro": "O parâmetro 'cliente_id' é obrigatório."}), 400
 
-    # 2. Buscar o cliente para obter seus dados
-    cliente = Cliente.query.get(cliente_id_int)
-    if not cliente:
-        return jsonify({"erro": "Cliente não encontrado."}), 404
+        # Delega a lógica de geração do relatório para a camada de serviço
+        relatorio = gerar_relatorio_faturamento(request.args.to_dict())
 
-    # 3. Buscar todos os processamentos do cliente para o ano especificado
-    processamentos_ano = Processamento.query.filter_by(
-        cliente_id=cliente_id_int,
-        ano=ano_int
-    ).order_by(Processamento.mes).all()
+        if relatorio is None:
+            return jsonify({"mensagem": "Nenhum faturamento processado para o período e cliente selecionados."}), 200
 
-    if not processamentos_ano:
-        return jsonify({"mensagem": f"Nenhum faturamento processado para o cliente {cliente.razao_social} em {ano_int}."}), 200
+        return jsonify(relatorio)
 
-    # 4. Calcular totais anuais e detalhamento mensal
-    faturamento_anual_total = sum(p.faturamento_total for p in processamentos_ano)
-    imposto_anual_total = sum(p.imposto_calculado for p in processamentos_ano)
-
-    detalhamento_mensal = [{
-        "mes": p.mes,
-        "faturamento_total": float(p.faturamento_total),
-        "imposto_calculado": float(p.imposto_calculado)
-    } for p in processamentos_ano]
-
-    # 5. Consolidar os serviços prestados no ano (agrupando por descrição)
-    ids_processamentos = [p.id for p in processamentos_ano]
-    
-    servicos_agrupados = db.session.query(
-        FaturamentoDetalhe.descricao_servico,
-        func.sum(FaturamentoDetalhe.valor).label('valor_total')
-    ).filter(
-        FaturamentoDetalhe.processamento_id.in_(ids_processamentos)
-    ).group_by(
-        FaturamentoDetalhe.descricao_servico
-    ).order_by(func.sum(FaturamentoDetalhe.valor).desc()).all()
-
-    # 6. Montar a resposta final
-    relatorio = {
-        "cliente": {"razao_social": cliente.razao_social, "cnpj": cliente.cnpj},
-        "ano_relatorio": ano_int,
-        "faturamento_anual_total": float(faturamento_anual_total),
-        "imposto_anual_total": float(imposto_anual_total),
-        "detalhamento_mensal": detalhamento_mensal,
-        "detalhamento_servicos": [{"servico": s.descricao_servico, "valor_total": float(s.valor_total)} for s in servicos_agrupados]
-    }
-
-    return jsonify(relatorio)
+    except ValueError as e:
+        # Captura erros de validação da camada de serviço (ex: cliente não encontrado, data inválida)
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        # Captura erros inesperados
+        current_app.logger.error(f"Erro inesperado ao gerar relatório: {e}")
+        return jsonify({"erro": "Ocorreu um erro interno ao gerar o relatório."}), 500
 
 @api_bp.route("/faturamento/processar", methods=["POST"])
 @token_required
 def processar_faturamento(current_user):
-    # Validação dos dados do formulário
-    if 'arquivo' not in request.files:
-        return jsonify({"erro": "Nenhum arquivo enviado"}), 400
-    
-    arquivo = request.files['arquivo']
-    cliente_id = request.form.get('cliente_id')
-    mes = request.form.get('mes')
-    ano = request.form.get('ano')
-
-    if not all([cliente_id, mes, ano]):
-        return jsonify({"erro": "cliente_id, mes e ano são obrigatórios"}), 400
-    
-    if arquivo.filename == '' or not arquivo.filename.endswith('.csv'):
-        return jsonify({"erro": "Arquivo inválido ou não é um CSV"}), 400
-
     try:
-        # Conversão e validação de tipos
-        cliente_id_int = int(cliente_id)
-        mes_int = int(mes)
-        ano_int = int(ano)
-    except (ValueError, TypeError):
-        return jsonify({"erro": "cliente_id, mes e ano devem ser números inteiros válidos."}), 400
+        # Validação inicial da requisição
+        if 'arquivo' not in request.files:
+            return jsonify({"erro": "Nenhum arquivo enviado"}), 400
+        arquivo = request.files['arquivo']
+        if arquivo.filename == '' or not arquivo.filename.endswith('.csv'):
+            return jsonify({"erro": "Arquivo inválido ou não é um CSV"}), 400
 
-    # 2. Busque o cliente para obter o regime tributário
-    cliente = Cliente.query.get(cliente_id_int)
-    if not cliente:
-        return jsonify({"erro": "Cliente não encontrado"}), 404
+        cliente_id = request.form.get('cliente_id')
+        mes = request.form.get('mes')
+        ano = request.form.get('ano')
+        if not all([cliente_id, mes, ano]):
+            return jsonify({"erro": "cliente_id, mes e ano são obrigatórios"}), 400
 
-    # Validação de duplicidade
-    if Processamento.query.filter_by(cliente_id=cliente_id_int, mes=mes_int, ano=ano_int).first():
-        return jsonify({"erro": f"Faturamento para o cliente no período {mes_int}/{ano_int} já foi processado."}), 409
-
-    try:
-        # Lógica de negócio com Pandas
-        try:
-            df = pd.read_csv(arquivo, sep=';', decimal=',', encoding='utf-8') # Adicionado encoding
-        except (pd.errors.ParserError, UnicodeDecodeError) as e:
-            return jsonify({"erro": f"Erro ao ler o CSV. Verifique o formato, separador (;) e codificação (UTF-8). Detalhe: {str(e)}"}), 400
-        
-        # --- LÓGICA DE CÁLCULO ---
-        # Exemplo simples:
-        # Validar se as colunas esperadas existem
-        colunas_esperadas = {'Valor', 'Descrição'}
-        if not colunas_esperadas.issubset(df.columns):
-            return jsonify({"erro": f"O arquivo CSV deve conter as colunas: {', '.join(colunas_esperadas)}"}), 400
-
-        faturamento_total = df['Valor'].sum()
-        # 3. Use a função de serviço para o cálculo
-        imposto_calculado = calcular_impostos(faturamento_total, cliente.regime_tributario)
-        # -------------------------
-
-        # Persistência no banco de dados
-        novo_processamento = Processamento(
-            cliente_id=cliente_id_int,
-            mes=mes_int,
-            ano=ano_int,
-            faturamento_total=faturamento_total,
-            imposto_calculado=imposto_calculado,
-            nome_arquivo_original=arquivo.filename
+        # Delega o processamento para a camada de serviço
+        novo_processamento = processar_arquivo_faturamento(
+            arquivo=arquivo,
+            cliente_id=int(cliente_id),
+            mes=int(mes),
+            ano=int(ano)
         )
-        db.session.add(novo_processamento)
-        
-        # Itera sobre o DataFrame e cria os detalhes
-        for index, row in df.iterrows():
-            detalhe = FaturamentoDetalhe(
-                processamento=novo_processamento, # Associa ao processamento pai
-                descricao_servico=row['Descrição'],
-                valor=row['Valor']
-            )
-            db.session.add(detalhe)
-
         db.session.commit()
 
         return jsonify({
             "status": "sucesso",
             "mensagem": "Faturamento processado com sucesso.",
-            "faturamento_total": float(faturamento_total),
-            "imposto_calculado": float(imposto_calculado)
+            "faturamento_total": float(novo_processamento.faturamento_total),
+            "imposto_calculado": float(novo_processamento.imposto_calculado)
         }), 201
 
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"erro": str(e)}), 400 # Erros de negócio (cliente não existe, CSV inválido, etc.)
+    except (TypeError, KeyError) as e:
+        db.session.rollback()
+        return jsonify({"erro": f"Dados de formulário inválidos ou ausentes: {e}"}), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({"erro": f"Ocorreu um erro ao processar o arquivo: {str(e)}"}), 500
+        current_app.logger.error(f"Erro inesperado ao processar faturamento: {e}")
+        return jsonify({"erro": "Ocorreu um erro interno ao processar o arquivo."}), 500

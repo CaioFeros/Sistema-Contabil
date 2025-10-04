@@ -1,105 +1,192 @@
+import json
 import random
 from datetime import datetime
 from decimal import Decimal
 import click
 from flask.cli import with_appcontext
+import os
+
+# Adicionando imports necessários
+from werkzeug.security import generate_password_hash
 
 # Corrigindo a importação circular: importar 'db' diretamente de 'models'
-from .models import db, Cliente, Processamento, FaturamentoDetalhe
-from app.services import calcular_impostos
-
-# --- DADOS DE AMOSTRA ---
-
-CLIENTES_PARA_CRIAR = [
-    {"razao_social": "Tech Solutions Ltda", "cnpj": "01.123.456/0001-11", "regime_tributario": "Lucro Presumido"},
-    {"razao_social": "Inova Consultoria S.A.", "cnpj": "02.234.567/0001-22", "regime_tributario": "Lucro Real"},
-    {"razao_social": "Mercado Varejista do Bairro", "cnpj": "03.345.678/0001-33", "regime_tributario": "Simples Nacional"},
-    {"razao_social": "Logística Express Transportes", "cnpj": "04.456.789/0001-44", "regime_tributario": "Lucro Presumido"},
-    {"razao_social": "Agropecuária Campo Verde", "cnpj": "05.567.890/0001-55", "regime_tributario": "Lucro Real"},
-]
-
-SERVICOS_AMOSTRA = [
-    "Consultoria em TI", "Desenvolvimento de Software", "Manutenção de Servidores",
-    "Análise de Dados", "Suporte Técnico", "Marketing Digital", "Auditoria Contábil",
-    "Transporte de Cargas Leves", "Armazenagem", "Consultoria Agrícola"
-]
+from app.models import db, Usuario, Cliente, Processamento, FaturamentoDetalhe
+from app.services import calcular_impostos, calcular_imposto_simples_nacional
 
 # --- FUNÇÕES DO SCRIPT ---
 
+def criar_usuario_padrao():
+    """Cria um usuário padrão para login se ele não existir."""
+    print("Verificando/Criando usuário padrão...", flush=True)
+    email_padrao = "dev@exemplo.com"
+    if not Usuario.query.filter_by(email=email_padrao).first():
+        senha_hash = generate_password_hash("senha123", method='pbkdf2:sha256')
+        novo_usuario = Usuario(email=email_padrao, senha_hash=senha_hash)
+        db.session.add(novo_usuario)
+        db.session.commit()
+        print(f"Usuário '{email_padrao}' criado com sucesso.", flush=True)
+    else:
+        print(f"Usuário '{email_padrao}' já existe.", flush=True)
+
 def limpar_dados():
     """Apaga todos os dados das tabelas relacionadas para evitar duplicatas."""
-    print("Limpando dados antigos...")
+    print("Limpando dados antigos...", flush=True)
     FaturamentoDetalhe.query.delete()
     Processamento.query.delete()
     Cliente.query.delete()
     db.session.commit()
-    print("Dados limpos com sucesso.")
+    print("Dados limpos com sucesso.", flush=True)
 
-def criar_clientes():
+def carregar_dados_json():
+    """Carrega os dados de amostra do arquivo seed_data.json."""
+    # Constrói o caminho para o arquivo JSON de forma segura
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(base_dir, 'seed_data.json') # Agora o JSON está no mesmo diretório
+    with open(json_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def criar_clientes(clientes_data):
     """Cria os clientes de amostra no banco de dados."""
-    print("Criando clientes...")
-    clientes_db = []
-    for cliente_data in CLIENTES_PARA_CRIAR:
+    print("Criando clientes...", flush=True)
+    for cliente_data in clientes_data:
         # Verifica se o cliente já existe pelo CNPJ
         cliente_existente = Cliente.query.filter_by(cnpj=cliente_data["cnpj"]).first()
         if not cliente_existente:
             novo_cliente = Cliente(**cliente_data)
             db.session.add(novo_cliente)
-            clientes_db.append(novo_cliente)
     db.session.commit()
-    print(f"{len(CLIENTES_PARA_CRIAR)} clientes criados ou já existentes.")
+    print(f"{len(clientes_data)} clientes criados ou já existentes.", flush=True)
     return Cliente.query.all()
 
-def gerar_faturamento(clientes):
-    """Gera dados de faturamento mensais para cada cliente."""
-    print("Gerando faturamento e processamentos...")
-    anos = [2023, 2024, 2025]
-    total_processamentos = 0
+def gerar_faturamento_massivo(clientes):
+    """Gera dados de faturamento massivos para todos os clientes de 2023 a 2025."""
+    print("Gerando faturamento massivo de 2023 a 2025...", flush=True)
+
+    if not clientes:
+        print("Nenhum cliente encontrado para gerar faturamento.", flush=True)
+        return
+
+    servicos_possiveis = [
+        "Consultoria de TI", "Desenvolvimento de Software", "Manutenção de Servidores",
+        "Suporte Técnico", "Análise de Dados", "Marketing Digital", "Design Gráfico",
+        "Gestão de Redes Sociais", "Auditoria Contábil", "Planejamento Tributário"
+    ]
 
     for cliente in clientes:
-        for ano in anos:
-            # Para 2025, gera dados apenas até o mês atual para ser mais realista
-            mes_final = datetime.now().month if ano == datetime.now().year else 12
-            
-            for mes in range(1, mes_final + 1):
-                detalhes = []
-                faturamento_mensal = Decimal('0.0')
-                
-                # Gera de 3 a 7 notas fiscais (serviços) por mês
-                for _ in range(random.randint(3, 7)):
-                    valor_servico = Decimal(random.uniform(1000, 1000000))
-                    detalhe = FaturamentoDetalhe(
-                        descricao_servico=random.choice(SERVICOS_AMOSTRA),
-                        valor=valor_servico
-                    )
-                    detalhes.append(detalhe)
-                    faturamento_mensal += valor_servico
+        print(f"  -> Gerando para o cliente: {cliente.razao_social}", flush=True)
+        for ano in range(2023, 2026): # de 2023 até 2025
+            for mes in range(1, 13):
+                # Pula meses futuros no ano corrente
+                if ano == datetime.now().year and mes > datetime.now().month:
+                    continue
 
-                imposto_calculado = calcular_impostos(float(faturamento_mensal), cliente.regime_tributario)
+                num_notas = random.randint(3, 5)
+                detalhes_mes = []
+                faturamento_total_mes = Decimal('0.0')
+
+                for _ in range(num_notas):
+                    descricao = random.choice(servicos_possiveis)
+                    valor = Decimal(random.uniform(1000, 500000)).quantize(Decimal('0.01'))
+                    detalhes_mes.append(FaturamentoDetalhe(descricao_servico=descricao, valor=valor))
+                    faturamento_total_mes += valor
+
+                if cliente.regime_tributario == 'Simples Nacional':
+                    imposto_calculado = calcular_imposto_simples_nacional(cliente.id, mes, ano, float(faturamento_total_mes))
+                else:
+                    imposto_calculado = calcular_impostos(float(faturamento_total_mes), cliente.regime_tributario)
 
                 novo_processamento = Processamento(
-                    cliente_id=cliente.id,
-                    mes=mes,
-                    ano=ano,
-                    faturamento_total=faturamento_mensal,
-                    imposto_calculado=Decimal(imposto_calculado),
-                    nome_arquivo_original=f"seed_data_{ano}_{mes}.csv",
-                    detalhes=detalhes
+                    cliente_id=cliente.id, mes=mes, ano=ano,
+                    faturamento_total=faturamento_total_mes,
+                    imposto_calculado=Decimal(imposto_calculado).quantize(Decimal('0.01')),
+                    nome_arquivo_original=f"gerado_automaticamente_{ano}_{mes}.csv",
+                    detalhes=detalhes_mes
                 )
                 db.session.add(novo_processamento)
-                total_processamentos += 1
 
     db.session.commit()
-    print(f"{total_processamentos} processamentos mensais gerados com sucesso.")
+    print("Geração de faturamento massivo concluída.", flush=True)
+
+def gerar_faturamento_especifico():
+    """Gera dados de faturamento específicos para a empresa de teste."""
+    print("Gerando faturamento específico para 'Contabilidade Teste de Imposto LTDA'...", flush=True)
+    
+    razao_social_teste = "Contabilidade Teste de Imposto LTDA"
+    cnpj_teste = "00.000.000/0001-11"
+
+    cliente_teste = Cliente.query.filter_by(cnpj=cnpj_teste).first()
+    if not cliente_teste:
+        cliente_teste = Cliente(
+            razao_social=razao_social_teste,
+            cnpj=cnpj_teste,
+            regime_tributario="Simples Nacional"
+        )
+        db.session.add(cliente_teste)
+        db.session.commit()
+        print(f"Cliente '{razao_social_teste}' criado.", flush=True)
+
+    # Dados de faturamento específicos
+    faturamentos = {
+        (2024, 1): "23204.00", (2024, 2): "12442.00", (2024, 3): "34082.00",
+        (2024, 4): "19010.00", (2024, 5): "20050.00", (2024, 6): "16595.00",
+        (2024, 7): "19060.00", (2024, 8): "17918.00", (2024, 9): "11140.00",
+        (2024, 10): "17636.00", (2024, 11): "10000.00", (2024, 12): "25712.00",
+        (2025, 1): "33084.00", (2025, 2): "29391.00", (2025, 3): "19046.00",
+        (2025, 4): "19667.00", (2025, 5): "19884.00", (2025, 6): "21911.00",
+        (2025, 7): "27068.00", (2025, 8): "23300.00", (2025, 9): "23204.00",
+    }
+
+    for (ano, mes), valor_str in faturamentos.items():
+        # Verifica se já existe um processamento para este período para evitar duplicatas
+        if Processamento.query.filter_by(cliente_id=cliente_teste.id, ano=ano, mes=mes).first():
+            continue
+
+        faturamento_total_mes = Decimal(valor_str)
+        
+        # Cria 2 notas fictícias que somam o valor total
+        valor_nota1 = (faturamento_total_mes / Decimal('2')).quantize(Decimal('0.01'))
+        valor_nota2 = faturamento_total_mes - valor_nota1
+
+        detalhes_mes = [
+            FaturamentoDetalhe(descricao_servico="Serviço de Contabilidade A", valor=valor_nota1),
+            FaturamentoDetalhe(descricao_servico="Serviço de Consultoria B", valor=valor_nota2)
+        ]
+
+        # O cálculo do imposto deve ser feito ANTES de criar o processamento,
+        # pois ele depende dos faturamentos anteriores já existentes no banco.
+        # Por isso, fazemos o commit a cada iteração.
+        imposto_calculado = calcular_imposto_simples_nacional(
+            cliente_id=cliente_teste.id,
+            mes_calculo=mes,
+            ano_calculo=ano,
+            faturamento_mes_atual=float(faturamento_total_mes)
+        )
+
+        novo_processamento = Processamento(
+            cliente_id=cliente_teste.id,
+            mes=mes,
+            ano=ano,
+            faturamento_total=faturamento_total_mes,
+            imposto_calculado=Decimal(imposto_calculado).quantize(Decimal('0.01')),
+            nome_arquivo_original=f"importado_teste_{ano}_{mes}.csv",
+            detalhes=detalhes_mes
+        )
+        db.session.add(novo_processamento)
+        db.session.commit() # Commit a cada mês para que o próximo cálculo tenha os dados corretos
+
+    print("Geração de faturamento específico concluída.", flush=True)
 
 @click.command('seed-db')
 @with_appcontext
 def seed_db_command():
     """Limpa e preenche o banco de dados com dados de teste."""
-    limpar_dados()
-    clientes = criar_clientes()
-    gerar_faturamento(clientes)
-    print("Banco de dados populado com sucesso!")
+    criar_usuario_padrao() # 1. Garante que o usuário de dev exista
+    dados = carregar_dados_json()
+    limpar_dados() # 2. Limpa apenas os dados de negócio
+    clientes = criar_clientes(dados['clientes'])
+    gerar_faturamento_massivo(clientes) # 3. Gera os dados de faturamento aleatórios
+    gerar_faturamento_especifico() # 4. Gera os dados específicos para o cliente de teste
+    print("Banco de dados populado com sucesso!", flush=True)
 
 def register_commands(app):
     """Registra os comandos CLI no aplicativo Flask."""

@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import api from './api'; // 1. Importa a instância configurada do Axios
 
 /**
  * Busca a lista de todos os clientes.
@@ -9,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
  */
 export const getClientes = async () => {
     try {
-        const response = await axios.get(`${API_URL}/clientes`);
+        const response = await api.get('/clientes'); // 2. Usa a instância 'api'
         return response.data;
     } catch (error) {
         console.error("Erro ao buscar clientes:", error.response?.data?.erro || error.message);
@@ -24,7 +22,7 @@ export const getClientes = async () => {
  */
 export const createCliente = async (clienteData) => {
     try {
-        const response = await axios.post(`${API_URL}/clientes`, clienteData);
+        const response = await api.post('/clientes', clienteData); // 3. Usa a instância 'api'
         return response.data;
     } catch (error) {
         console.error("Erro ao criar cliente:", error.response?.data?.erro || error.message);
