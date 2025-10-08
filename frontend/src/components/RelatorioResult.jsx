@@ -1,7 +1,5 @@
 import { formatCurrency } from '../utils/formatters';
 import StatCard from './StatCard';
-import Plot from 'react-plotly.js';
-import { useTheme } from '../context/ThemeContext';
 
 // Helper para formatar a alíquota como porcentagem (ex: 0.06 -> 6,00%)
 const formatPercentage = (value) => {
@@ -9,7 +7,6 @@ const formatPercentage = (value) => {
 };
 
 function RelatorioResult({ relatorio }) {
-    const { theme } = useTheme();
     if (!relatorio) {
         return null;
     }
@@ -51,57 +48,6 @@ function RelatorioResult({ relatorio }) {
                     </table>
                 </div>
             </div>
-
-            {/* Gráficos */}
-            {relatorio.dados_graficos && (
-                <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Gráfico de Faturamento vs. Imposto */}
-                    <div className="bg-card dark:bg-dark-card rounded-lg shadow p-4">
-                        <Plot
-                            data={[
-                                {
-                                    x: relatorio.dados_graficos.faturamento_vs_imposto.meses,
-                                    y: relatorio.dados_graficos.faturamento_vs_imposto.faturamento,
-                                    type: 'bar',
-                                    name: 'Faturamento',
-                                },
-                                {
-                                    x: relatorio.dados_graficos.faturamento_vs_imposto.meses,
-                                    y: relatorio.dados_graficos.faturamento_vs_imposto.imposto,
-                                    type: 'bar',
-                                    name: 'Imposto',
-                                },
-                            ]}
-                            layout={{
-                                title: 'Faturamento vs. Imposto',
-                                barmode: 'group',
-                                autosize: true,
-                                paper_bgcolor: theme === 'dark' ? '#1e293b' : '#ffffff',
-                                plot_bgcolor: theme === 'dark' ? '#1e293b' : '#ffffff',
-                                font: { color: theme === 'dark' ? '#cbd5e1' : '#334155' },
-                            }}
-                            useResizeHandler={true}
-                            className="w-full h-full"
-                        />
-                    </div>
-
-                    {/* Gráfico de Evolução da Alíquota */}
-                    <div className="bg-card dark:bg-dark-card rounded-lg shadow p-4">
-                        <Plot
-                            data={[{
-                                x: relatorio.dados_graficos.evolucao_aliquota.meses,
-                                y: relatorio.dados_graficos.evolucao_aliquota.aliquotas.map(a => a * 100),
-                                type: 'scatter',
-                                mode: 'lines+markers',
-                                name: 'Alíquota Efetiva (%)',
-                            }]}
-                            layout={{ title: 'Evolução da Alíquota Efetiva (%)', autosize: true, paper_bgcolor: theme === 'dark' ? '#1e293b' : '#ffffff', plot_bgcolor: theme === 'dark' ? '#1e293b' : '#ffffff', font: { color: theme === 'dark' ? '#cbd5e1' : '#334155' } }}
-                            useResizeHandler={true}
-                            className="w-full h-full"
-                        />
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
