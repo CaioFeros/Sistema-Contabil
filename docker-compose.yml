@@ -12,6 +12,12 @@ services:
     ports:
       # Mapeia a porta 5432 do contêiner para a porta 5433 da sua máquina para evitar conflitos.
       - "5433:5432"
+    healthcheck:
+      # Comando que verifica se o postgres está pronto para aceitar conexões
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
@@ -24,17 +30,16 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - FLASK_APP=run.py
       - FLASK_DEBUG=1
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-    # Adiciona um comando para esperar o banco de dados ficar pronto antes de iniciar o Flask.
-    # Isso evita que o backend falhe ao iniciar se o banco de dados ainda não estiver pronto.
-    # Requer que 'wait-for-it.sh' esteja na pasta 'backend'.
-    # (Você precisará criar este arquivo)
-    command: sh -c "./wait-for-it.sh db:5432 -- flask run --host=0.0.0.0"
+    # O comando agora espera o healthcheck do banco de dados passar.
+    # 1. Aplica as migrações. 2. Popula o banco. 3. Inicia o servidor.
+    command: sh -c "flask db upgrade && flask seed-db && gunicorn --bind 0.0.0.0:5000 'app:create_app()'"
 
   frontend:
     image: node:20-alpine
@@ -47,6 +52,23 @@ services:
     ports:
       - "5173:5173"
     command: sh -c "npm install && npm run dev -- --host"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: sistema_contabil_dashboard
+    restart: always
+    volumes:
+      - ./dashboard:/app
+    ports:
+      - "8501:8501" # Porta padrão do Streamlit
+    depends_on:
+      db:
+        condition: service_healthy # Espera o DB estar pronto
+    environment:
+      # Passa a URL do banco para o Streamlit poder se conectar
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
 
 volumes:
   postgres_data:
