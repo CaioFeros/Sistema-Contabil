@@ -1,4 +1,4 @@
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency } from '@/utils/formatters';
 
 /**
  * Componente de card para exibir uma estatística ou valor chave.
@@ -13,4 +13,3 @@ const StatCard = ({ title, value, formatAsCurrency = true }) => (
 );
 
 export default StatCard;
-

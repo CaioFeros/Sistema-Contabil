@@ -1,13 +1,18 @@
-// vite.config.js (RECOMENDADO)
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-// https://vitejs.dev/config/ 
-export default defineConfig(({ mode }) => {
- return {
+// Polyfill para __dirname em Módulos ES (ESM)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// https://vitejs.dev/config/
+export default defineConfig({
   plugins: [react()],
-  // A configuração CSS do PostCSS é geralmente desnecessária, pois o Vite
-  // a detecta automaticamente se o postcss.config.js estiver na raiz.
-  // Você pode remover a seção 'css' inteira, a menos que esteja tendo problemas.
- };
-});
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'), // Caminho correto para a pasta 'src'
+    },
+  },
+})

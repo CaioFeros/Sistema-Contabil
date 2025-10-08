@@ -1,5 +1,7 @@
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency } from '@/utils/formatters';
 import StatCard from './StatCard';
+import FaturamentoVsImpostoChart from './charts/FaturamentoVsImpostoChart';
+import EvolucaoAliquotaChart from './charts/EvolucaoAliquotaChart';
 
 // Helper para formatar a alíquota como porcentagem (ex: 0.06 -> 6,00%)
 const formatPercentage = (value) => {
@@ -48,6 +50,21 @@ function RelatorioResult({ relatorio }) {
                     </table>
                 </div>
             </div>
+
+            {/* Gráficos */}
+            {relatorio.dados_graficos && (
+                <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Gráfico de Faturamento vs. Imposto */}
+                    <div className="bg-card dark:bg-dark-card rounded-lg shadow" style={{ height: '24rem' }}>
+                        <FaturamentoVsImpostoChart data={relatorio.dados_graficos.faturamento_vs_imposto} />
+                    </div>
+
+                    {/* Gráfico de Evolução da Alíquota */}
+                    <div className="bg-card dark:bg-dark-card rounded-lg shadow" style={{ height: '24rem' }}>
+                        <EvolucaoAliquotaChart data={relatorio.dados_graficos.evolucao_aliquota} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
