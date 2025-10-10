@@ -118,22 +118,51 @@ def gerar_relatorio_faturamento(params):
     tipo_filtro = params.get('tipo_filtro')
     ano = params.get('ano')
     mes = params.get('mes')
+    data_inicio_str = params.get('data_inicio')
+    data_fim_str = params.get('data_fim')
 
     # Seleciona o escopo conforme o tipo de filtro
     query = Processamento.query.filter(Processamento.cliente_id == cliente_id)
 
-    # Caso filtro mensal: retorna somente o mês/ano selecionado
+    # Lógica de filtragem por período
     if tipo_filtro == 'mes' and ano is not None and mes is not None:
         query = query.filter(
             Processamento.ano == ano,
             Processamento.mes == mes
         )
-    # Caso padrão (anual): todos os meses do ano selecionado
+    elif tipo_filtro in ['ultimos_12_meses', 'ultimos_13_meses']:
+        num_meses = 13 if tipo_filtro == 'ultimos_12_meses' else 14
+        hoje = datetime.today()
+        # O período começa no primeiro dia de N-1 meses atrás
+        # Ex: hoje é 15/07/2024, ultimos 12 meses começa em 01/08/2023
+        data_inicial = (hoje.replace(day=1) - timedelta(days=1)).replace(day=1) # Vai para o último dia do mês anterior, depois para o primeiro dia
+        for _ in range(num_meses - 1):
+            data_inicial = (data_inicial - timedelta(days=1)).replace(day=1)
+        
+        # O período termina no último dia do mês passado
+        data_final = hoje.replace(day=1) - timedelta(days=1)
+
+        query = query.filter(
+            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial,
+            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final
+        )
+    elif tipo_filtro == 'periodo' and data_inicio_str and data_fim_str:
+        try:
+            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m').date()
+            data_fim_dt = datetime.strptime(data_fim_str, '%Y-%m')
+            # Para incluir o mês final, a data limite é o último dia daquele mês
+            data_fim = (data_fim_dt.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            query = query.filter(
+                func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicio,
+                func.make_date(Processamento.ano, Processamento.mes, 1) <= data_fim
+            )
+        except ValueError:
+            raise ValueError("Formato de data inválido para o período. Use YYYY-MM.")
     elif ano is not None:
         query = query.filter(Processamento.ano == ano)
 
     # Ordena cronologicamente
-    processamentos = query.order_by(Processamento.mes).all()
+    processamentos = query.order_by(Processamento.ano, Processamento.mes).all()
 
     if not processamentos:
         return None
