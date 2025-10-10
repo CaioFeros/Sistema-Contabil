@@ -29,18 +29,30 @@ function RelatoriosPage() {
             <h1 className="text-2xl font-bold mb-6 text-foreground dark:text-dark-foreground">Relatório Anual de Faturamento</h1>
 
             {/* Seção de Filtros */}
+            <div className="print:hidden">
             <RelatorioFilterForm
                 clientes={clientes}
                 loading={loading || loadingClientes}
                 onSubmit={handleGerarRelatorio}
                 formError={formError}
             />
+            </div>
 
             {errorClientes && <div className="p-3 mb-4 text-danger bg-red-100 dark:bg-red-900/30 dark:text-red-300 rounded-lg">{errorClientes}</div>}
             {error && <div className="p-3 mb-4 text-danger bg-red-100 dark:bg-red-900/30 dark:text-red-300 rounded-lg">{error}</div>}
             {infoMessage && <div className="p-3 mb-4 text-sky-800 bg-sky-100 dark:bg-sky-900/30 dark:text-sky-300 rounded-lg">{infoMessage}</div>}
 
             {/* Seção de Resultados */}
+            {relatorio && (
+                <div className="mb-4 flex justify-end print:hidden">
+                    <button
+                        onClick={() => window.print()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                    >
+                        Imprimir / PDF
+                    </button>
+                </div>
+            )}
             <RelatorioResult relatorio={relatorio} />
         </>
     );

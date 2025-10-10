@@ -1,61 +1,66 @@
-import Plot from 'react-plotly.js';
+import { BarChart } from '@mui/x-charts/BarChart';
 import { useThemeColors } from '@/hooks/useThemeColors';
 
 function FaturamentoVsImpostoChart({ data }) {
     const colors = useThemeColors();
     
-    const plotData = [
-        {
-            x: data.meses,
-            y: data.faturamento,
-            type: 'bar',
-            name: 'Faturamento',
-            marker: {
-                color: colors.primary,
-            },
-        },
-        {
-            x: data.meses,
-            y: data.imposto,
-            type: 'bar',
-            name: 'Imposto',
-            marker: {
-                color: colors.secondary,
-            },
-        },
-    ];
-
-    const layout = {
-        title: 'Faturamento vs. Imposto',
-        barmode: 'group',
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        font: {
-            color: colors.foreground,
-        },
-        xaxis: {
-            gridcolor: colors.border,
-        },
-        yaxis: {
-            title: 'Valores (R$)',
-            gridcolor: colors.border,
-        },
-        legend: {
-            orientation: 'h',
-            yanchor: 'bottom',
-            y: 1.02,
-        },
-        // Margens ajustadas para um visual mais limpo
-        margin: { l: 60, r: 20, t: 60, b: 40 },
-    };
+    // Converte os dados para o formato esperado pelo MUI Charts
+    const chartData = data.meses.map((mes, index) => ({
+        mes: mes,
+        faturamento: data.faturamento[index],
+        imposto: data.imposto[index],
+    }));
 
     return (
-        <Plot
-            data={plotData}
-            layout={layout}
-            useResizeHandler={true}
-            className="w-full h-full"
-        />
+        <div className="w-full h-full">
+            <BarChart
+                // Removemos width e height para que o gráfico se ajuste 100% ao container pai.
+                // Controlamos o espaço interno com a propriedade 'margin'.
+                margin={{ top: 30, bottom: 40, left: 70, right: 20 }}
+                series={[
+                    {
+                        data: chartData.map(item => item.faturamento),
+                        label: 'Faturamento',
+                        color: colors.primary,
+                    },
+                    {
+                        data: chartData.map(item => item.imposto),
+                        label: 'Imposto',
+                        color: colors.secondary,
+                    },
+                ]}
+                xAxis={[
+                    {
+                        data: chartData.map(item => item.mes),
+                        scaleType: 'band',
+                    },
+                ]}
+                yAxis={[
+                    {
+                        label: 'Valores (R$)',
+                        valueFormatter: (value) => `R$ ${value.toLocaleString('pt-BR')}`,
+                    },
+                ]}
+                grid={{ vertical: true, horizontal: true }}
+                sx={{
+                    '& .MuiChartsAxis-root': {
+                        stroke: colors.border,
+                    },
+                    '& .MuiChartsGrid-root': {
+                        stroke: colors.border,
+                    },
+                    '& .MuiChartsAxis-tickLabel': {
+                        fill: colors.foreground,
+                    },
+                    '& .MuiChartsAxis-label': {
+                        fill: colors.foreground,
+                    },
+                    '& .MuiChartsLegend-root': {
+                        fill: colors.foreground,
+                    },
+                }}
+            />
+        </div>
     );
 }
 

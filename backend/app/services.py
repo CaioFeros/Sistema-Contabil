@@ -15,27 +15,31 @@ def calcular_impostos(faturamento, regime_tributario):
         return faturamento * 0.34  # Exemplo de alíquota
     return 0
 
-def calcular_imposto_simples_nacional(cliente_id, mes_calculo, ano_calculo, faturamento_mes_atual):
+def calcular_imposto_simples_nacional(cliente_id, mes_calculo, ano_calculo, faturamento_mes_atual, rbt12_fornecido=None):
     """
     Calcula o imposto do Simples Nacional com base na receita bruta dos últimos 12 meses (RBT12).
+    Pode receber um RBT12 pré-calculado para cenários específicos (como cálculo de alíquota futura).
     """
-    # 1. Definir o período de 12 meses anteriores
-    # data_final é o último dia do mês anterior ao mês de cálculo.
-    data_final = datetime(ano_calculo, mes_calculo, 1) - timedelta(days=1)
-    
-    # data_inicial é o primeiro dia do mesmo mês, mas no ano anterior.
-    data_inicial = datetime(data_final.year, data_final.month, 1).replace(year=data_final.year - 1)
+    if rbt12_fornecido is not None:
+        rbt12 = Decimal(rbt12_fornecido)
+    else:
+        # 1. Definir o período de 12 meses anteriores se não for fornecido
+        # data_final é o último dia do mês anterior ao mês de cálculo.
+        data_final = datetime(ano_calculo, mes_calculo, 1) - timedelta(days=1)
+        
+        # data_inicial é o primeiro dia do mesmo mês, mas no ano anterior.
+        data_inicial = datetime(data_final.year, data_final.month, 1).replace(year=data_final.year - 1)
 
-    # 2. Consultar o faturamento acumulado (RBT12)
-    resultado = db.session.query(
-        func.sum(Processamento.faturamento_total)
-    ).filter(
-        Processamento.cliente_id == cliente_id,
-        func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial,
-        func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final
-    ).scalar()
+        # 2. Consultar o faturamento acumulado (RBT12)
+        resultado = db.session.query(
+            func.sum(Processamento.faturamento_total)
+        ).filter(
+            Processamento.cliente_id == cliente_id,
+            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial,
+            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final
+        ).scalar()
 
-    rbt12 = Decimal(resultado or 0)
+        rbt12 = Decimal(resultado or 0)
 
     # 3. Definir as faixas de alíquota do Anexo III (exemplo)
     faixas = [
@@ -111,13 +115,25 @@ def gerar_relatorio_faturamento(params):
     incluindo dados para gráficos.
     """
     cliente_id = params.get('cliente_id')
+    tipo_filtro = params.get('tipo_filtro')
     ano = params.get('ano')
+    mes = params.get('mes')
 
-    # Busca todos os processamentos para o cliente e ano, ordenados por mês
-    processamentos = Processamento.query.filter(
-        Processamento.cliente_id == cliente_id,
-        Processamento.ano == ano
-    ).order_by(Processamento.mes).all()
+    # Seleciona o escopo conforme o tipo de filtro
+    query = Processamento.query.filter(Processamento.cliente_id == cliente_id)
+
+    # Caso filtro mensal: retorna somente o mês/ano selecionado
+    if tipo_filtro == 'mes' and ano is not None and mes is not None:
+        query = query.filter(
+            Processamento.ano == ano,
+            Processamento.mes == mes
+        )
+    # Caso padrão (anual): todos os meses do ano selecionado
+    elif ano is not None:
+        query = query.filter(Processamento.ano == ano)
+
+    # Ordena cronologicamente
+    processamentos = query.order_by(Processamento.mes).all()
 
     if not processamentos:
         return None
@@ -148,12 +164,56 @@ def gerar_relatorio_faturamento(params):
         if p.faturamento_total > 0:
             aliquota_efetiva = p.imposto_calculado / p.faturamento_total
 
+        # --- CÁLCULO DA ALÍQUOTA FUTURA ---
+        # O RBT12 para o próximo mês inclui o faturamento do mês atual.
+        # Período: 11 meses anteriores + mês atual.
+        # A data final é o último dia do mês atual do processamento (p.mes, p.ano)
+        data_final_futura = (datetime(p.ano, p.mes, 1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        
+        # A data inicial é o primeiro dia de 11 meses antes do mês atual.
+        data_inicial_futura = (data_final_futura.replace(day=1) - timedelta(days=335)).replace(day=1)
+
+        rbt12_futuro_result = db.session.query(
+            func.sum(Processamento.faturamento_total)
+        ).filter(
+            Processamento.cliente_id == cliente_id,
+            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial_futura,
+            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final_futura
+        ).scalar()
+        rbt12_futuro = Decimal(rbt12_futuro_result or 0)
+
+        # --- CÁLCULO DA ALÍQUOTA FUTURA (LÓGICA DEDICADA) ---
+        faixas_sn = [
+            {"limite": Decimal("180000.00"), "aliquota": Decimal("0.06"), "deducao": Decimal("0")},
+            {"limite": Decimal("360000.00"), "aliquota": Decimal("0.112"), "deducao": Decimal("9360.00")},
+            {"limite": Decimal("720000.00"), "aliquota": Decimal("0.135"), "deducao": Decimal("17640.00")},
+            {"limite": Decimal("1800000.00"), "aliquota": Decimal("0.16"), "deducao": Decimal("35640.00")},
+            {"limite": Decimal("3600000.00"), "aliquota": Decimal("0.21"), "deducao": Decimal("125640.00")},
+            {"limite": Decimal("4800000.00"), "aliquota": Decimal("0.33"), "deducao": Decimal("648000.00")}
+        ]
+
+        aliquota_futura = Decimal("0.06") # Alíquota mínima
+        for faixa in faixas_sn:
+            if rbt12_futuro <= faixa["limite"]:
+                aliquota_nominal = faixa["aliquota"]
+                parcela_a_deduzir = faixa["deducao"]
+                if rbt12_futuro > 0:
+                    aliquota_futura = ((rbt12_futuro * aliquota_nominal) - parcela_a_deduzir) / rbt12_futuro
+                else:
+                    aliquota_futura = faixas_sn[0]['aliquota']
+                break
+        else: # Se RBT12 for maior que o limite máximo
+            ultima_faixa = faixas_sn[-1]
+            aliquota_futura = ((rbt12_futuro * ultima_faixa["aliquota"]) - ultima_faixa["deducao"]) / rbt12_futuro
+
+
         detalhamento_mensal.append({
             'mes': p.mes,
             'ano': p.ano,
             'faturamento_total': p.faturamento_total,
             'faturamento_acumulado': rbt12,
             'aliquota': aliquota_efetiva,
+            'aliquota_futura': aliquota_futura,
             'imposto_calculado': p.imposto_calculado,
         })
 
@@ -178,8 +238,7 @@ def gerar_relatorio_faturamento(params):
     # --- FIM DA PREPARAÇÃO ---
 
     cliente = Cliente.query.get(cliente_id)
-
-    return {
+    response = {
         'cliente': {
             'id': cliente.id,
             'razao_social': cliente.razao_social,
@@ -191,3 +250,82 @@ def gerar_relatorio_faturamento(params):
         'detalhamento_mensal': detalhamento_mensal,
         'dados_graficos': dados_graficos  # Adiciona os dados do gráfico à resposta
     }
+
+    # Quando o filtro for mensal, incluir histórico de 13 meses e notas fiscais do mês
+    if tipo_filtro == 'mes' and ano is not None and mes is not None:
+        # Monta a lista de (ano, mes) para os últimos 13 meses incluindo o mês selecionado
+        meses_anos = []
+        data_ref = datetime(int(ano), int(mes), 1)
+        for i in range(12, -1, -1):  # 13 meses (12 atrás até o atual)
+            ref = (data_ref.replace(day=1) - timedelta(days=1)).replace(day=1)
+            # Ajusta voltando i passos a partir do mês selecionado
+        
+        # Recalcula corretamente a sequência
+        meses_anos = []
+        ano_atual = int(ano)
+        mes_atual = int(mes)
+        for i in range(12, -1, -1):
+            a = ano_atual
+            m = mes_atual - (12 - i)
+            while m <= 0:
+                m += 12
+                a -= 1
+            meses_anos.append((a, m))
+
+        # Busca os processamentos desses 13 meses
+        proc_13m = (
+            db.session.query(Processamento)
+            .filter(
+                Processamento.cliente_id == cliente_id,
+                db.tuple_(Processamento.ano, Processamento.mes).in_(meses_anos)
+            )
+            .all()
+        )
+
+        # Indexa por (ano, mes) para preservar ordem de meses_anos
+        chave = {(p.ano, p.mes): p for p in proc_13m}
+
+        meses_hist = [f"{m:02d}/{a}" for (a, m) in meses_anos]
+        fatur_hist = []
+        imposto_hist = []
+        aliq_hist = []
+        for (a, m) in meses_anos:
+            p = chave.get((a, m))
+            if p is None:
+                fatur_hist.append(0)
+                imposto_hist.append(0)
+                aliq_hist.append(0)
+            else:
+                fatur_hist.append(float(p.faturamento_total))
+                imposto_hist.append(float(p.imposto_calculado))
+                if p.faturamento_total and float(p.faturamento_total) > 0:
+                    aliq_hist.append(float(p.imposto_calculado) / float(p.faturamento_total))
+                else:
+                    aliq_hist.append(0)
+
+        response['historico_13_meses'] = {
+            'meses': meses_hist,
+            'faturamento': fatur_hist,
+            'imposto': imposto_hist,
+            'aliquotas': aliq_hist,
+        }
+
+        # Notas fiscais (detalhes) do mês selecionado
+        proc_mes = db.session.query(Processamento).filter(
+            Processamento.cliente_id == cliente_id,
+            Processamento.ano == ano,
+            Processamento.mes == mes
+        ).first()
+
+        if proc_mes:
+            response['notas_fiscais_mes'] = [
+                {
+                    'descricao_servico': d.descricao_servico,
+                    'valor': float(d.valor),
+                }
+                for d in proc_mes.detalhes
+            ]
+        else:
+            response['notas_fiscais_mes'] = []
+
+    return response
