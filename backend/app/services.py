@@ -28,7 +28,10 @@ def calcular_imposto_simples_nacional(cliente_id, mes_calculo, ano_calculo, fatu
         data_final = datetime(ano_calculo, mes_calculo, 1) - timedelta(days=1)
         
         # data_inicial é o primeiro dia do mesmo mês, mas no ano anterior.
-        data_inicial = datetime(data_final.year, data_final.month, 1).replace(year=data_final.year - 1)
+        # Evita usar replace(year=) para não ter problemas com anos bissextos (29 fev)
+        ano_inicial_calc = ano_calculo - 1
+        mes_inicial_calc = mes_calculo
+        data_inicial = datetime(ano_inicial_calc, mes_inicial_calc, 1)
 
         # 2. Consultar o faturamento acumulado (RBT12)
         resultado = db.session.query(
@@ -148,10 +151,21 @@ def gerar_relatorio_faturamento(params):
         )
     elif tipo_filtro == 'periodo' and data_inicio_str and data_fim_str:
         try:
-            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m').date()
+            # Converte as strings YYYY-MM para objetos datetime
+            data_inicio_dt = datetime.strptime(data_inicio_str, '%Y-%m')
             data_fim_dt = datetime.strptime(data_fim_str, '%Y-%m')
-            # Para incluir o mês final, a data limite é o último dia daquele mês
-            data_fim = (data_fim_dt.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            
+            # data_inicio é o primeiro dia do mês
+            data_inicio = data_inicio_dt.date()
+            
+            # data_fim é o último dia do mês
+            # Vai para o primeiro dia do próximo mês e subtrai 1 dia
+            if data_fim_dt.month == 12:
+                primeiro_dia_prox_mes = datetime(data_fim_dt.year + 1, 1, 1)
+            else:
+                primeiro_dia_prox_mes = datetime(data_fim_dt.year, data_fim_dt.month + 1, 1)
+            data_fim = (primeiro_dia_prox_mes - timedelta(days=1)).date()
+            
             query = query.filter(
                 func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicio,
                 func.make_date(Processamento.ano, Processamento.mes, 1) <= data_fim
@@ -177,8 +191,15 @@ def gerar_relatorio_faturamento(params):
         imposto_total_periodo += p.imposto_calculado
 
         # Cálculo do RBT12 para o mês p
+        # data_final é o último dia do mês anterior ao mês do processamento
         data_final_rbt12 = datetime(p.ano, p.mes, 1) - timedelta(days=1)
-        data_inicial_rbt12 = data_final_rbt12.replace(year=data_final_rbt12.year - 1) + timedelta(days=1)
+        
+        # data_inicial é o primeiro dia do mesmo mês, mas 12 meses antes
+        # Evita usar replace(year=) para não ter problemas com anos bissextos (29 fev)
+        # Exemplo: março/2024 -> calcula de março/2023 até fev/2024
+        ano_inicial_rbt12 = p.ano - 1
+        mes_inicial_rbt12 = p.mes
+        data_inicial_rbt12 = datetime(ano_inicial_rbt12, mes_inicial_rbt12, 1)
         rbt12_query_result = db.session.query(
             func.sum(Processamento.faturamento_total)
         ).filter(
@@ -196,11 +217,24 @@ def gerar_relatorio_faturamento(params):
         # --- CÁLCULO DA ALÍQUOTA FUTURA ---
         # O RBT12 para o próximo mês inclui o faturamento do mês atual.
         # Período: 11 meses anteriores + mês atual.
-        # A data final é o último dia do mês atual do processamento (p.mes, p.ano)
-        data_final_futura = (datetime(p.ano, p.mes, 1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
         
-        # A data inicial é o primeiro dia de 11 meses antes do mês atual.
-        data_inicial_futura = (data_final_futura.replace(day=1) - timedelta(days=335)).replace(day=1)
+        # data_final_futura é o último dia do mês atual do processamento
+        if p.mes == 12:
+            primeiro_dia_prox_mes_fut = datetime(p.ano + 1, 1, 1)
+        else:
+            primeiro_dia_prox_mes_fut = datetime(p.ano, p.mes + 1, 1)
+        data_final_futura = primeiro_dia_prox_mes_fut - timedelta(days=1)
+        
+        # data_inicial_futura é o primeiro dia de 11 meses antes do mês atual
+        # Exemplo: março/2024 (mês 3) -> de abril/2023 (mês 4) até março/2024 = 12 meses
+        # Cálculo: março + 1 = abril, ano - 1 = 2023
+        if p.mes < 12:
+            ano_inicial_fut = p.ano - 1
+            mes_inicial_fut = p.mes + 1
+        else:  # Dezembro
+            ano_inicial_fut = p.ano
+            mes_inicial_fut = 1
+        data_inicial_futura = datetime(ano_inicial_fut, mes_inicial_fut, 1)
 
         rbt12_futuro_result = db.session.query(
             func.sum(Processamento.faturamento_total)

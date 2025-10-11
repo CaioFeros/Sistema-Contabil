@@ -4,7 +4,7 @@ import MainLayout from './components/MainLayout';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
-import ClientesPage from './pages/ClientesPage';
+import GerenciarClientes from './pages/GerenciarClientes';
 import FaturamentoPage from './pages/FaturamentoPage';
 import RelatoriosPage from './pages/RelatoriosPage';
 import { ThemeProvider } from './context/ThemeContext';
@@ -34,7 +34,7 @@ function App() {
             {/* A rota "/" dentro do layout redireciona para o dashboard */}
             <Route index element={<Navigate to="/app/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} /> 
-            <Route path="clientes" element={<ClientesPage />} />
+            <Route path="clientes" element={<GerenciarClientes />} />
             <Route path="faturamento" element={<FaturamentoPage />} />
             <Route path="relatorios" element={<RelatoriosPage />} />
           </Route>

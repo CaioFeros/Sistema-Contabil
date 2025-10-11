@@ -10,6 +10,7 @@ __pycache__/
 
 # Dependências do Node.js
 frontend/node_modules/
+backend/node_modules/
 
 # Arquivos de build e logs do frontend
 frontend/dist/

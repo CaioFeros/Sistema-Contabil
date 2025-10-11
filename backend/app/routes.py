@@ -46,6 +46,114 @@ def get_clientes(current_user):
     resultado = [{"id": c.id, "razao_social": c.razao_social, "cnpj": c.cnpj, "regime_tributario": c.regime_tributario} for c in clientes]
     return jsonify(resultado)
 
+@api_bp.route("/clientes/<int:cliente_id>", methods=["GET"])
+@token_required
+def get_cliente(current_user, cliente_id):
+    """Busca um cliente específico com todos os seus dados"""
+    cliente = Cliente.query.get(cliente_id)
+    if not cliente:
+        return jsonify({"erro": "Cliente não encontrado"}), 404
+    
+    return jsonify(cliente.to_dict())
+
+@api_bp.route("/clientes/<int:cliente_id>", methods=["PUT"])
+@token_required
+def update_cliente(current_user, cliente_id):
+    """Atualiza os dados de um cliente"""
+    import json
+    
+    cliente = Cliente.query.get(cliente_id)
+    if not cliente:
+        return jsonify({"erro": "Cliente não encontrado"}), 404
+    
+    data = request.get_json()
+    
+    # Atualiza apenas os campos que foram enviados
+    if 'razao_social' in data:
+        cliente.razao_social = data['razao_social']
+    if 'regime_tributario' in data:
+        cliente.regime_tributario = data['regime_tributario']
+    if 'nome_fantasia' in data:
+        cliente.nome_fantasia = data['nome_fantasia']
+    if 'data_abertura' in data:
+        cliente.data_abertura = data['data_abertura']
+    
+    # Situação Cadastral
+    if 'situacao_cadastral' in data:
+        cliente.situacao_cadastral = data['situacao_cadastral']
+    if 'data_situacao' in data:
+        cliente.data_situacao = data['data_situacao']
+    if 'motivo_situacao' in data:
+        cliente.motivo_situacao = data['motivo_situacao']
+    
+    # Natureza Jurídica
+    if 'natureza_juridica' in data:
+        cliente.natureza_juridica = data['natureza_juridica']
+    
+    # Atividade Econômica
+    if 'cnae_principal' in data:
+        cliente.cnae_principal = data['cnae_principal']
+    if 'cnae_secundarias' in data:
+        # Converte array para JSON string
+        cliente.cnae_secundarias = json.dumps(data['cnae_secundarias']) if data['cnae_secundarias'] else None
+    
+    # Endereço
+    if 'logradouro' in data:
+        cliente.logradouro = data['logradouro']
+    if 'numero' in data:
+        cliente.numero = data['numero']
+    if 'complemento' in data:
+        cliente.complemento = data['complemento']
+    if 'bairro' in data:
+        cliente.bairro = data['bairro']
+    if 'cep' in data:
+        cliente.cep = data['cep']
+    if 'municipio' in data:
+        cliente.municipio = data['municipio']
+    if 'uf' in data:
+        cliente.uf = data['uf']
+    
+    # Contato
+    if 'telefone1' in data:
+        cliente.telefone1 = data['telefone1']
+    if 'telefone2' in data:
+        cliente.telefone2 = data['telefone2']
+    if 'email' in data:
+        cliente.email = data['email']
+    
+    # Informações Empresariais
+    if 'capital_social' in data:
+        cliente.capital_social = data['capital_social']
+    if 'porte' in data:
+        cliente.porte = data['porte']
+    
+    # Opções Fiscais
+    if 'opcao_simples' in data:
+        cliente.opcao_simples = data['opcao_simples']
+    if 'data_opcao_simples' in data:
+        cliente.data_opcao_simples = data['data_opcao_simples']
+    if 'opcao_mei' in data:
+        cliente.opcao_mei = data['opcao_mei']
+    if 'data_exclusao_simples' in data:
+        cliente.data_exclusao_simples = data['data_exclusao_simples']
+    
+    # Situação Especial
+    if 'situacao_especial' in data:
+        cliente.situacao_especial = data['situacao_especial']
+    if 'data_situacao_especial' in data:
+        cliente.data_situacao_especial = data['data_situacao_especial']
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            "mensagem": "Cliente atualizado com sucesso!",
+            "cliente": cliente.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao atualizar cliente: {e}")
+        return jsonify({"erro": "Erro ao atualizar cliente"}), 500
+
 @api_bp.route("/faturamento/processamentos", methods=["GET"])
 @token_required
 def get_processamentos(current_user):

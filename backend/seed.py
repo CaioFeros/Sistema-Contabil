@@ -48,9 +48,10 @@ def carregar_dados_json():
 def criar_clientes(clientes_data):
     """Cria os clientes de amostra no banco de dados."""
     print("Criando clientes...", flush=True)
+    # Usamos 'with_entities' para selecionar apenas a coluna 'id' e evitar erros
+    # se o banco de dados ainda não estiver totalmente migrado.
     for cliente_data in clientes_data:
-        # Verifica se o cliente já existe pelo CNPJ
-        cliente_existente = Cliente.query.filter_by(cnpj=cliente_data["cnpj"]).first()
+        cliente_existente = Cliente.query.with_entities(Cliente.id).filter_by(cnpj=cliente_data.get("cnpj")).first()
         if not cliente_existente:
             novo_cliente = Cliente(**cliente_data)
             db.session.add(novo_cliente)
