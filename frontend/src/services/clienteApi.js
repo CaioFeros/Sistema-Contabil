@@ -60,3 +60,33 @@ export const updateCliente = async (id, clienteData) => {
         throw error;
     }
 };
+
+/**
+ * Consulta os dados de um CNPJ na Receita Federal via BrasilAPI.
+ * @param {string} cnpj - O CNPJ a ser consultado (com ou sem formatação).
+ * @returns {Promise<object>} Uma promessa que resolve para os dados do CNPJ.
+ */
+export const consultarCNPJ = async (cnpj) => {
+    try {
+        const response = await api.get(`/cnpj/${cnpj}`);
+        return response.data;
+    } catch (error) {
+        console.error(`Erro ao consultar CNPJ ${cnpj}:`, error.response?.data?.erro || error.message);
+        throw error;
+    }
+};
+
+/**
+ * Deleta um cliente e todos os seus dados relacionados.
+ * @param {number} id - O ID do cliente a ser deletado.
+ * @returns {Promise<object>} Uma promessa que resolve para a mensagem de sucesso.
+ */
+export const deleteCliente = async (id) => {
+    try {
+        const response = await api.delete(`/clientes/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error(`Erro ao deletar cliente ${id}:`, error.response?.data?.erro || error.message);
+        throw error;
+    }
+};

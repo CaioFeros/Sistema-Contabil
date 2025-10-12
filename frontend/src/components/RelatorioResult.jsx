@@ -34,6 +34,7 @@ function RelatorioResult({ relatorio }) {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase">Alíquota</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase">Imposto</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase">Faturamento Acumulado</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase">Fator R</th>
                                 {relatorio.historico_13_meses && (
                                     <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase">Alíquota Próx. Mês</th>
                                 )}
@@ -47,6 +48,9 @@ function RelatorioResult({ relatorio }) {
                                     <td className="px-6 py-4">{formatPercentage(item.aliquota)}</td>
                                     <td className="px-6 py-4">{formatCurrency(item.imposto_calculado)}</td>
                                     <td className="px-6 py-4">{formatCurrency(item.faturamento_acumulado)}</td>
+                                    <td className="px-6 py-4 font-semibold text-green-600 dark:text-green-400">
+                                        {formatCurrency(item.fator_r || 0)}
+                                    </td>
                                     {relatorio.historico_13_meses && (
                                         <td className="px-6 py-4">{formatPercentage(item.aliquota_futura)}</td>
                                     )}

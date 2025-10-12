@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useClientes } from '../hooks/useClientes';
 import { useNavigate } from 'react-router-dom';
 import CNPJModal from '../components/CNPJModal';
+import AdicionarClienteModal from '../components/AdicionarClienteModal';
 
 function GerenciarClientes() {
     const navigate = useNavigate();
-    const { clientes, loading, error } = useClientes();
+    const { clientes, loading, error, refreshClientes } = useClientes();
     const [selectedCliente, setSelectedCliente] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAdicionarModalOpen, setIsAdicionarModalOpen] = useState(false);
 
     const handleClienteClick = (cliente) => {
         setSelectedCliente(cliente);
@@ -17,6 +19,22 @@ function GerenciarClientes() {
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setSelectedCliente(null);
+    };
+
+    const handleClienteDeleted = () => {
+        refreshClientes(); // Recarrega a lista após deletar
+    };
+
+    const handleOpenAdicionarModal = () => {
+        setIsAdicionarModalOpen(true);
+    };
+
+    const handleCloseAdicionarModal = () => {
+        setIsAdicionarModalOpen(false);
+    };
+
+    const handleClienteAdded = () => {
+        refreshClientes(); // Recarrega a lista de clientes
     };
 
     if (loading) {
@@ -48,8 +66,14 @@ function GerenciarClientes() {
                 <h1 className="text-3xl font-bold text-foreground dark:text-dark-foreground">
                     Gerenciar Clientes
                 </h1>
-                <button className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
-                    Adicionar Cliente
+                <button 
+                    onClick={handleOpenAdicionarModal}
+                    className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all flex items-center space-x-2"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Adicionar Cliente</span>
                 </button>
             </div>
 
@@ -106,6 +130,14 @@ function GerenciarClientes() {
                 <CNPJModal 
                     cliente={selectedCliente} 
                     onClose={handleCloseModal}
+                    onClienteDeleted={handleClienteDeleted}
+                />
+            )}
+
+            {isAdicionarModalOpen && (
+                <AdicionarClienteModal 
+                    onClose={handleCloseAdicionarModal}
+                    onClienteAdded={handleClienteAdded}
                 />
             )}
         </>

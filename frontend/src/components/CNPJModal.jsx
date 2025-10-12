@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getClienteById, updateCliente } from '../services/clienteApi';
+import { getClienteById, updateCliente, consultarCNPJ, deleteCliente } from '../services/clienteApi';
 
 // Componente InputField definido fora para evitar perda de foco
 const InputField = ({ label, value, field, type = 'text', readOnly = false, onChange, disabled }) => (
@@ -21,12 +21,14 @@ const InputField = ({ label, value, field, type = 'text', readOnly = false, onCh
     </div>
 );
 
-function CNPJModal({ cliente, onClose }) {
+function CNPJModal({ cliente, onClose, onClienteDeleted }) {
     const [dadosCNPJ, setDadosCNPJ] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [buscandoCNPJ, setBuscandoCNPJ] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     // Busca os dados completos do cliente ao abrir o modal
     useEffect(() => {
@@ -107,6 +109,105 @@ function CNPJModal({ cliente, onClose }) {
                 i === index ? value : cnae
             )
         }));
+    };
+
+    const handleBuscarCNPJ = async () => {
+        if (!dadosCNPJ?.cnpj) {
+            alert('Por favor, informe o CNPJ antes de buscar.');
+            return;
+        }
+
+        try {
+            setBuscandoCNPJ(true);
+            const dadosReceita = await consultarCNPJ(dadosCNPJ.cnpj);
+            
+            // Preenche os dados retornados da API
+            setDadosCNPJ(prev => ({
+                ...prev,
+                razaoSocial: dadosReceita.razao_social || prev.razaoSocial,
+                nomeFantasia: dadosReceita.nome_fantasia || prev.nomeFantasia,
+                dataAbertura: dadosReceita.data_abertura || prev.dataAbertura,
+                situacaoCadastral: dadosReceita.situacao_cadastral || prev.situacaoCadastral,
+                dataSituacao: dadosReceita.data_situacao || prev.dataSituacao,
+                motivoSituacao: dadosReceita.motivo_situacao || prev.motivoSituacao,
+                naturezaJuridica: dadosReceita.natureza_juridica || prev.naturezaJuridica,
+                cnaePrincipal: dadosReceita.cnae_principal || prev.cnaePrincipal,
+                cnaeSecundarias: dadosReceita.cnae_secundarias || prev.cnaeSecundarias,
+                logradouro: dadosReceita.logradouro || prev.logradouro,
+                numero: dadosReceita.numero || prev.numero,
+                complemento: dadosReceita.complemento || prev.complemento,
+                bairro: dadosReceita.bairro || prev.bairro,
+                cep: dadosReceita.cep || prev.cep,
+                municipio: dadosReceita.municipio || prev.municipio,
+                uf: dadosReceita.uf || prev.uf,
+                telefone1: dadosReceita.telefone1 || prev.telefone1,
+                telefone2: dadosReceita.telefone2 || prev.telefone2,
+                email: dadosReceita.email || prev.email,
+                capitalSocial: dadosReceita.capital_social || prev.capitalSocial,
+                porte: dadosReceita.porte || prev.porte,
+                opcaoSimples: dadosReceita.opcao_simples || prev.opcaoSimples,
+                dataOpcaoSimples: dadosReceita.data_opcao_simples || prev.dataOpcaoSimples,
+                opcaoMEI: dadosReceita.opcao_mei || prev.opcaoMEI,
+                situacaoEspecial: dadosReceita.situacao_especial || prev.situacaoEspecial,
+                dataSituacaoEspecial: dadosReceita.data_situacao_especial || prev.dataSituacaoEspecial
+            }));
+            
+            alert('Dados do CNPJ carregados com sucesso!');
+        } catch (err) {
+            console.error('Erro ao buscar CNPJ:', err);
+            const mensagemErro = err.response?.data?.erro || 'Erro ao consultar CNPJ. Verifique o número e tente novamente.';
+            alert(mensagemErro);
+        } finally {
+            setBuscandoCNPJ(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        // Confirmação dupla para evitar exclusões acidentais
+        const confirmacao1 = window.confirm(
+            `⚠️ ATENÇÃO! Você está prestes a excluir:\n\n` +
+            `Cliente: ${dadosCNPJ.razaoSocial}\n` +
+            `CNPJ: ${dadosCNPJ.cnpj}\n\n` +
+            `Esta ação irá DELETAR:\n` +
+            `• Todos os dados do cliente\n` +
+            `• Todos os processamentos de faturamento\n` +
+            `• Todas as notas fiscais relacionadas\n\n` +
+            `Deseja realmente continuar?`
+        );
+        
+        if (!confirmacao1) return;
+        
+        const confirmacao2 = window.confirm(
+            `🔴 CONFIRMAÇÃO FINAL\n\n` +
+            `Digite OK no próximo passo para confirmar a exclusão permanente de:\n` +
+            `${dadosCNPJ.razaoSocial}\n\n` +
+            `Esta ação NÃO PODE SER DESFEITA!`
+        );
+        
+        if (!confirmacao2) return;
+        
+        const confirmacaoTexto = window.prompt(
+            'Digite "EXCLUIR" (em maiúsculas) para confirmar a exclusão permanente:'
+        );
+        
+        if (confirmacaoTexto !== 'EXCLUIR') {
+            alert('Exclusão cancelada.');
+            return;
+        }
+        
+        try {
+            setDeleting(true);
+            const response = await deleteCliente(cliente.id);
+            alert(`✅ ${response.mensagem}\n${response.processamentos_removidos} processamentos foram removidos.`);
+            onClienteDeleted?.(); // Callback para atualizar lista
+            onClose();
+        } catch (err) {
+            console.error('Erro ao deletar cliente:', err);
+            const mensagemErro = err.response?.data?.erro || 'Erro ao deletar cliente. Tente novamente.';
+            alert(`❌ ${mensagemErro}`);
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const handleSave = async () => {
@@ -223,55 +324,77 @@ function CNPJModal({ cliente, onClose }) {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                    <div className="mb-4 flex justify-end space-x-2">
-                        {!isEditing ? (
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                <span>Editar</span>
-                            </button>
-                        ) : (
-                            <>
+                    <div className="mb-4 flex justify-between items-center">
+                        <button
+                            onClick={handleDelete}
+                            disabled={deleting || isEditing}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                        >
+                            {deleting ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    <span>Excluindo...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    <span>Excluir Cliente</span>
+                                </>
+                            )}
+                        </button>
+
+                        <div className="flex space-x-2">
+                            {!isEditing ? (
                                 <button
-                                    onClick={() => setIsEditing(false)}
-                                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                    onClick={() => setIsEditing(true)}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
                                 >
-                                    Cancelar
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    <span>Editar</span>
                                 </button>
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:bg-green-400 disabled:cursor-not-allowed"
-                                >
-                                    {saving ? (
-                                        <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                            <span>Salvando...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            <span>Salvar</span>
-                                        </>
-                                    )}
-                                </button>
-                            </>
-                        )}
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={() => setIsEditing(false)}
+                                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={saving}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:bg-green-400 disabled:cursor-not-allowed"
+                                    >
+                                        {saving ? (
+                                            <>
+                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                <span>Salvando...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <span>Salvar</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-6">
-                        <p className="text-sm text-blue-800 dark:text-blue-200 flex items-start">
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-6">
+                        <p className="text-sm text-green-800 dark:text-green-200 flex items-start">
                             <svg className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
                             <span>
-                                <strong>Informação:</strong> Os dados são armazenados no banco de dados. Em uma próxima fase, será integrada a API da Receita Federal para busca automática.
+                                <strong>Integração Ativa!</strong> Clique em "Editar" e depois em "Buscar CNPJ" para consultar os dados atualizados diretamente da Receita Federal via BrasilAPI.
                             </span>
                         </p>
                     </div>
@@ -282,7 +405,54 @@ function CNPJModal({ cliente, onClose }) {
                             Número de Inscrição
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InputField label="CNPJ" value={dadosCNPJ.cnpj} field="cnpj" readOnly onChange={handleInputChange} disabled={!isEditing} />
+                            <div className="md:col-span-2">
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                        CNPJ
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={dadosCNPJ.cnpj || ''}
+                                            onChange={(e) => handleInputChange('cnpj', e.target.value)}
+                                            disabled={!isEditing}
+                                            readOnly
+                                            className={`flex-1 px-3 py-2 border rounded-lg text-sm ${
+                                                !isEditing
+                                                    ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400'
+                                                    : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'
+                                            } transition-colors`}
+                                        />
+                                        {isEditing && (
+                                            <button
+                                                type="button"
+                                                onClick={handleBuscarCNPJ}
+                                                disabled={buscandoCNPJ || !dadosCNPJ.cnpj}
+                                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                                            >
+                                                {buscandoCNPJ ? (
+                                                    <>
+                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                                        <span>Buscando...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                        </svg>
+                                                        <span>Buscar CNPJ</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                    {isEditing && (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Clique em "Buscar CNPJ" para preencher automaticamente os dados da Receita Federal
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
                             <InputField label="Razão Social" value={dadosCNPJ.razaoSocial} field="razaoSocial" onChange={handleInputChange} disabled={!isEditing} />
                             <InputField label="Regime Tributário" value={dadosCNPJ.regimeTributario} field="regimeTributario" onChange={handleInputChange} disabled={!isEditing} />
                             <InputField label="Nome Fantasia" value={dadosCNPJ.nomeFantasia} field="nomeFantasia" onChange={handleInputChange} disabled={!isEditing} />

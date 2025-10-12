@@ -1,0 +1,103 @@
+feat: Sistema completo de importação de faturamento via CSV
+
+Implementação completa de importação automática de Notas Fiscais Eletrônicas (NF-e) via arquivos CSV, com validações, cadastro automático de clientes e interface moderna.
+
+## ✨ Funcionalidades Principais
+
+### Backend
+- Parser inteligente de CSV com detecção automática de separador e encoding
+- Validação de CNPJ único por arquivo
+- Detecção automática de competência (mês/ano)
+- Cadastro automático de cliente via API da Receita Federal (BrasilAPI)
+- Cálculo automático de impostos na consolidação
+- Verificação de notas duplicadas
+- 3 novas rotas API: upload-preview, cadastrar-cliente-csv, consolidar
+
+### Frontend
+- Upload múltiplo com drag-and-drop
+- Tela de conferência com preview detalhado
+- Modal de cadastro automático de cliente
+- Barra de progresso animada durante consolidação
+- Sistema de abas (Manual / CSV)
+- Validação pré-upload de arquivos
+- Mensagens de erro específicas e acionáveis
+
+## 🔧 Melhorias de UX
+
+### Melhoria 1: Barra de Progresso
+- Feedback visual durante consolidação
+- Contador: "Processando X de Y competências"
+- Porcentagem animada: 0% → 100%
+- Duração mínima: 3.8 segundos
+- Mensagens informativas
+
+### Melhoria 2: Validação de Duplicatas
+- Detecção automática de notas duplicadas
+- Alerta visual com lista de duplicatas
+- Checkbox individual por competência
+- Formato: "NF XXX - Tomador" para rastreabilidade
+
+### Melhoria 3: Mensagens de Erro Profissionais
+- 6 categorias de erro com cores e ícones
+- Emojis visuais para identificação rápida
+- Contexto claro do problema
+- Soluções passo a passo
+- Detalhes técnicos expandíveis
+
+## 📦 Arquivos Novos
+
+Backend:
+- backend/app/csv_parser.py (367 linhas)
+- backend/tests/test_csv_parser.py (135 linhas)
+- backend/IMPORTACAO_CSV_GUIA.md
+
+Frontend:
+- frontend/src/components/ImportacaoCSV.jsx
+- frontend/src/components/PreviewImportacao.jsx
+- frontend/src/components/CadastroClienteModal.jsx
+- frontend/src/components/ErroDetalhado.jsx
+- frontend/src/components/AdicionarClienteModal.jsx
+- frontend/src/services/importacaoApi.js
+- frontend/src/utils/errosImportacao.js
+- frontend/src/utils/cnpjUtils.js
+
+Documentação:
+- IMPLEMENTACAO_IMPORTACAO_CSV.md
+- REVISAO_IMPORTACAO_CSV.md
+- MELHORIA_1_BARRA_PROGRESSO.md
+- MELHORIA_2_VALIDACAO_DUPLICATAS.md
+- MELHORIA_3_MENSAGENS_ERRO.md
+- RESUMO_3_MELHORIAS.md
+- TESTE_BARRA_PROGRESSO.md
+
+## 🐛 Correções
+
+- Fix: Cálculo de data evitando "day is out of range for month"
+- Fix: CNPJ lookup com regexp para comparação flexível
+- Fix: Campo imposto_calculado preenchido automaticamente
+- Fix: Campo nome_arquivo_original salvo corretamente
+- Fix: Uso de descricao_servico (padrão do seed)
+- Fix: Barra de progresso limitada a 100% máximo
+- Fix: Adição do campo fator_R no relatório mensal
+
+## 📊 Estatísticas
+
+- ~2.200 linhas de código
+- 8 componentes novos
+- 3 rotas API novas
+- 7 testes unitários (100% passing)
+- 7 documentos técnicos
+- Zero linter errors
+
+## ✅ Testes
+
+- [x] Parser de CSV com dados reais
+- [x] Upload múltiplo de arquivos
+- [x] Cadastro automático via API
+- [x] Validação de duplicatas
+- [x] Cálculo de impostos
+- [x] Barra de progresso
+- [x] Mensagens de erro
+
+Co-authored-by: AI Assistant <assistant@cursor.sh>
+

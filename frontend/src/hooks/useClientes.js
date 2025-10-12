@@ -11,19 +11,26 @@ export function useClientes() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
+    const fetchClientes = async () => {
+        try {
+            setLoading(true);
+            const data = await fetchClientesApi();
+            setClientes(data);
+            setError('');
+        } catch (err) {
+            setError(err.message || 'Falha ao carregar a lista de clientes.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchClientes = async () => {
-            try {
-                const data = await fetchClientesApi();
-                setClientes(data);
-            } catch (err) {
-                setError(err.message || 'Falha ao carregar a lista de clientes.');
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchClientes();
     }, []); // Executa apenas uma vez na montagem do componente
 
-    return { clientes, loading, error };
+    const refreshClientes = () => {
+        fetchClientes();
+    };
+
+    return { clientes, loading, error, refreshClientes };
 }

@@ -270,11 +270,17 @@ def gerar_relatorio_faturamento(params):
             aliquota_futura = ((rbt12_futuro * ultima_faixa["aliquota"]) - ultima_faixa["deducao"]) / rbt12_futuro
 
 
+        # Calcula o Fator R
+        # Fator R = (RBT12 / 12) * 0.28
+        media_mensal_12m = rbt12 / Decimal('12') if rbt12 > 0 else Decimal('0')
+        fator_r = media_mensal_12m * Decimal('0.28')
+        
         detalhamento_mensal.append({
             'mes': p.mes,
             'ano': p.ano,
             'faturamento_total': p.faturamento_total,
             'faturamento_acumulado': rbt12,
+            'fator_r': fator_r,
             'aliquota': aliquota_efetiva,
             'aliquota_futura': aliquota_futura,
             'imposto_calculado': p.imposto_calculado,
