@@ -1,5 +1,0 @@
-streamlit
-pandas
-plotly-express
-sqlalchemy
-psycopg2-binary

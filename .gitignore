@@ -20,6 +20,14 @@ frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 
+# Build do frontend para produção
+backend/frontend_build/
+
+# Banco de dados SQLite
+*.db
+*.sqlite
+*.sqlite3
+
 # Arquivos de IDE
 .idea/
 *.suo

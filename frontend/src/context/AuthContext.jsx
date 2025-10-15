@@ -4,7 +4,7 @@ import axios from 'axios';
 export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [token, setToken] = useState(localStorage.getItem('token'));
+    const [token, setToken] = useState(localStorage.getItem('authToken'));
     const [user, setUser] = useState(null); // Poderia armazenar informações do usuário decodificadas do token
 
     // Configura o interceptor do Axios para adicionar o token a todas as requisições
@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
     const login = (newToken) => {
         setToken(newToken);
-        localStorage.setItem('token', newToken);
+        localStorage.setItem('authToken', newToken);
         // Opcional: decodificar o token para obter informações do usuário
         // const decodedUser = jwt_decode(newToken);
         // setUser(decodedUser);
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         setToken(null);
-        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
         setUser(null);
     };
 

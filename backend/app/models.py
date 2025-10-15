@@ -1,12 +1,30 @@
 from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
 db = SQLAlchemy()
 
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     senha_hash = db.Column(db.String(256), nullable=False)
-    papel = db.Column(db.String(80), nullable=False, default='ADMIN')
+    papel = db.Column(db.String(80), nullable=False, default='USER')
+    nome = db.Column(db.String(120), nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ultimo_login = db.Column(db.DateTime)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'papel': self.papel,
+            'nome': self.nome,
+            'ativo': self.ativo,
+            'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None,
+            'ultimo_login': self.ultimo_login.isoformat() if self.ultimo_login else None
+        }
 
 class Cliente(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -102,7 +120,7 @@ class Processamento(db.Model):
     faturamento_total = db.Column(db.Numeric(10, 2), nullable=False)
     imposto_calculado = db.Column(db.Numeric(10, 2), nullable=False)
     nome_arquivo_original = db.Column(db.String(255), nullable=False)
-    data_processamento = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    data_processamento = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     cliente = db.relationship('Cliente')
     detalhes = db.relationship('FaturamentoDetalhe', backref='processamento', lazy=True, cascade="all, delete-orphan")
@@ -115,3 +133,29 @@ class FaturamentoDetalhe(db.Model):
     processamento_id = db.Column(db.Integer, db.ForeignKey('processamento.id'), nullable=False)
     descricao_servico = db.Column(db.String(300), nullable=False)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
+
+class LogAuditoria(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    acao = db.Column(db.String(100), nullable=False)  # CREATE, UPDATE, DELETE, LOGIN, etc.
+    entidade = db.Column(db.String(50), nullable=False)  # CLIENTE, USUARIO, FATURAMENTO, etc.
+    entidade_id = db.Column(db.Integer)  # ID da entidade afetada
+    detalhes = db.Column(db.Text)  # JSON com detalhes da operação
+    data_acao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ip_address = db.Column(db.String(45))  # IPv4 ou IPv6
+    
+    usuario = db.relationship('Usuario')
+    
+    def to_dict(self):
+        import json
+        return {
+            'id': self.id,
+            'usuario_id': self.usuario_id,
+            'usuario_nome': self.usuario.nome if self.usuario else 'Usuário Removido',
+            'acao': self.acao,
+            'entidade': self.entidade,
+            'entidade_id': self.entidade_id,
+            'detalhes': json.loads(self.detalhes) if self.detalhes else {},
+            'data_acao': self.data_acao.isoformat(),
+            'ip_address': self.ip_address
+        }

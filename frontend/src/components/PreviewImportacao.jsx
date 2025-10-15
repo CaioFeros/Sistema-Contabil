@@ -39,7 +39,24 @@ const PreviewImportacao = ({ dadosPreview: dadosPreviewInicial, onConsolidacaoCo
   });
   
   // Estado para substituições por competência
-  const [substituicoesPorCompetencia, setSubstituicoesPorCompetencia] = useState({});
+  // Já marca como true as competências que já existem
+  const [substituicoesPorCompetencia, setSubstituicoesPorCompetencia] = useState(() => {
+    const inicial = {};
+    dadosPreviewInicial.arquivos_processados.forEach(arquivo => {
+      if (arquivo.status === 'ok' && arquivo.competencias) {
+        arquivo.competencias.forEach(comp => {
+          if (comp.ja_existe) {
+            const chave = `${comp.mes}_${comp.ano}`;
+            if (!inicial[arquivo.id_temporario]) {
+              inicial[arquivo.id_temporario] = {};
+            }
+            inicial[arquivo.id_temporario][chave] = true; // Marca como true por padrão
+          }
+        });
+      }
+    });
+    return inicial;
+  });
   
   // Estados para barra de progresso
   const [progressoAtual, setProgressoAtual] = useState(0);
@@ -88,15 +105,16 @@ const PreviewImportacao = ({ dadosPreview: dadosPreviewInicial, onConsolidacaoCo
   };
 
   const handleClienteCadastrado = async (cliente) => {
+    const cnpjCadastrado = clienteParaCadastrar.cnpj;
+    
     // Fecha o modal
     setClienteParaCadastrar(null);
     
-    // Reprocessa o preview com o novo cliente cadastrado
-    // Simula um re-upload apenas do arquivo problemático
+    // Atualiza TODOS os arquivos com o mesmo CNPJ
     try {
-      // Atualiza o dadosPreview com o cliente cadastrado
       const novosArquivos = dadosPreview.arquivos_processados.map(arquivo => {
-        if (arquivo.id_temporario === clienteParaCadastrar.arquivoId) {
+        // Atualiza todos os arquivos que têm o mesmo CNPJ do cliente que acabou de ser cadastrado
+        if (arquivo.cnpj === cnpjCadastrado && (arquivo.status === 'nao_cadastrado' || arquivo.precisa_cadastrar)) {
           return {
             ...arquivo,
             status: 'ok',
@@ -106,7 +124,7 @@ const PreviewImportacao = ({ dadosPreview: dadosPreviewInicial, onConsolidacaoCo
               razao_social: cliente.razao_social,
               cnpj_formatado: cliente.cnpj
             },
-            avisos: arquivo.avisos.filter(a => !a.includes('não está cadastrado'))
+            avisos: arquivo.avisos?.filter(a => !a.includes('não está cadastrado')) || []
           };
         }
         return arquivo;
@@ -117,27 +135,59 @@ const PreviewImportacao = ({ dadosPreview: dadosPreviewInicial, onConsolidacaoCo
         arquivos_processados: novosArquivos
       });
       
-      // Marca o arquivo como selecionado
-      setArquivosSelecionados(prev => ({
-        ...prev,
-        [clienteParaCadastrar.arquivoId]: true
-      }));
+      // Marca TODOS os arquivos do mesmo CNPJ como selecionados
+      const novosArquivosSelecionados = { ...arquivosSelecionados };
+      novosArquivos.forEach(arquivo => {
+        if (arquivo.cnpj === cnpjCadastrado && arquivo.status === 'ok') {
+          novosArquivosSelecionados[arquivo.id_temporario] = true;
+        }
+      });
+      setArquivosSelecionados(novosArquivosSelecionados);
+      
+      // Verifica se há outros clientes (com CNPJ diferente) que ainda precisam ser cadastrados
+      const proximoArquivoNaoCadastrado = novosArquivos.find(
+        arquivo => arquivo.cnpj !== cnpjCadastrado && (arquivo.status === 'nao_cadastrado' || arquivo.precisa_cadastrar)
+      );
+      
+      if (proximoArquivoNaoCadastrado) {
+        // Aguarda um momento antes de abrir o próximo modal
+        // Isso garante que a API respire e o estado seja limpo
+        setTimeout(() => {
+          setClienteParaCadastrar({
+            cnpj: proximoArquivoNaoCadastrado.cnpj,
+            razaoSocial: proximoArquivoNaoCadastrado.razao_social,
+            arquivoId: proximoArquivoNaoCadastrado.id_temporario
+          });
+        }, 500); // 500ms de delay
+      }
       
     } catch (error) {
       console.error('Erro ao atualizar preview:', error);
-      setErro('Erro ao atualizar dados após cadastro do cliente');
+      setErro({
+        categoria: 'sistema',
+        titulo: 'Erro ao Atualizar Preview',
+        mensagem: 'Não foi possível atualizar os arquivos após o cadastro do cliente.',
+        solucao: 'Tente cancelar e fazer o upload novamente.',
+        detalhes: error.message
+      });
     }
   };
 
   const handleCancelarCadastro = () => {
-    setClienteParaCadastrar(null);
-    // Remove o arquivo da seleção
     if (clienteParaCadastrar) {
-      setArquivosSelecionados(prev => ({
-        ...prev,
-        [clienteParaCadastrar.arquivoId]: false
-      }));
+      const cnpjCancelado = clienteParaCadastrar.cnpj;
+      
+      // Remove TODOS os arquivos com o mesmo CNPJ da seleção
+      const novosArquivosSelecionados = { ...arquivosSelecionados };
+      dadosPreview.arquivos_processados.forEach(arquivo => {
+        if (arquivo.cnpj === cnpjCancelado) {
+          novosArquivosSelecionados[arquivo.id_temporario] = false;
+        }
+      });
+      setArquivosSelecionados(novosArquivosSelecionados);
     }
+    
+    setClienteParaCadastrar(null);
   };
 
   const getStatusIcon = (status) => {
@@ -272,6 +322,7 @@ const PreviewImportacao = ({ dadosPreview: dadosPreviewInicial, onConsolidacaoCo
       {/* Modal de Cadastro de Cliente */}
       {clienteParaCadastrar && (
         <CadastroClienteModal
+          key={clienteParaCadastrar.cnpj} // Force remount quando CNPJ mudar
           cnpj={clienteParaCadastrar.cnpj}
           razaoSocial={clienteParaCadastrar.razaoSocial}
           onCadastrado={handleClienteCadastrado}

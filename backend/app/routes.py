@@ -7,6 +7,7 @@ from .models import db, Cliente, Processamento, FaturamentoDetalhe
 from sqlalchemy.orm import joinedload
 from .auth import token_required
 from .services import processar_arquivo_faturamento, gerar_relatorio_faturamento, calcular_imposto_simples_nacional
+from .audit import log_action
 
 api_bp = Blueprint('api', __name__, url_prefix='/api') # Blueprint principal da API
 
@@ -59,6 +60,13 @@ def create_cliente(current_user):
     db.session.add(novo_cliente)
     db.session.commit()
 
+    # Log de auditoria
+    log_action(current_user.id, 'CREATE', 'CLIENTE', novo_cliente.id, {
+        'razao_social': novo_cliente.razao_social,
+        'cnpj': novo_cliente.cnpj,
+        'regime_tributario': novo_cliente.regime_tributario
+    })
+
     return jsonify({
         "mensagem": "Cliente criado com sucesso!",
         "cliente": novo_cliente.to_dict()
@@ -95,17 +103,38 @@ def delete_cliente(current_user, cliente_id):
     try:
         razao_social = cliente.razao_social
         cnpj = cliente.cnpj
+        regime_tributario = cliente.regime_tributario
         
         # Busca e deleta todos os processamentos (que deletarão os detalhes em cascade)
         processamentos = Processamento.query.filter_by(cliente_id=cliente_id).all()
         num_processamentos = len(processamentos)
         
+        # Registra logs de exclusão de cada processamento
         for proc in processamentos:
+            # Conta o número de notas (detalhes) do processamento
+            total_notas = len(proc.detalhes) if proc.detalhes else 0
+            
+            log_action(current_user.id, 'DELETE', 'FATURAMENTO', proc.id, {
+                'cliente_id': cliente_id,
+                'cliente_nome': razao_social,
+                'mes': proc.mes,
+                'ano': proc.ano,
+                'total_notas': total_notas,
+                'motivo': 'Excluído junto com o cliente'
+            })
             db.session.delete(proc)
         
         # Deleta o cliente
         db.session.delete(cliente)
         db.session.commit()
+        
+        # Registra log de exclusão do cliente
+        log_action(current_user.id, 'DELETE', 'CLIENTE', cliente_id, {
+            'razao_social': razao_social,
+            'cnpj': cnpj,
+            'regime_tributario': regime_tributario,
+            'num_processamentos': num_processamentos
+        })
         
         current_app.logger.info(f"Cliente deletado: {razao_social} ({cnpj}) - {num_processamentos} processamentos removidos")
         
@@ -536,10 +565,14 @@ def upload_preview_csv(current_user):
             import re
             cnpj_limpo = re.sub(r'[^\d]', '', cnpj)
             
-            # Busca por CNPJ exato ou comparando apenas dígitos
-            cliente = Cliente.query.filter(
-                db.func.regexp_replace(Cliente.cnpj, '[^0-9]', '', 'g') == cnpj_limpo
-            ).first()
+            # Busca compatível com SQLite e PostgreSQL
+            # Busca todos e filtra no Python (mais compatível)
+            cliente = None
+            for c in Cliente.query.all():
+                cnpj_db_limpo = re.sub(r'[^\d]', '', c.cnpj or '')
+                if cnpj_db_limpo == cnpj_limpo:
+                    cliente = c
+                    break
             
             if not cliente:
                 arquivo_result['status'] = 'nao_cadastrado'
@@ -642,10 +675,13 @@ def cadastrar_cliente_csv(current_user):
         import re
         cnpj_limpo = re.sub(r'[^\d]', '', cnpj)
         
-        # Verifica se já existe
-        cliente_existente = Cliente.query.filter(
-            db.func.regexp_replace(Cliente.cnpj, '[^0-9]', '', 'g') == cnpj_limpo
-        ).first()
+        # Verifica se já existe (compatível com SQLite e PostgreSQL)
+        cliente_existente = None
+        for c in Cliente.query.all():
+            cnpj_db_limpo = re.sub(r'[^\d]', '', c.cnpj or '')
+            if cnpj_db_limpo == cnpj_limpo:
+                cliente_existente = c
+                break
         
         if cliente_existente:
             return jsonify({
@@ -710,6 +746,14 @@ def cadastrar_cliente_csv(current_user):
             
             db.session.add(novo_cliente)
             db.session.commit()
+            
+            # Log de auditoria
+            log_action(current_user.id, 'CREATE', 'CLIENTE', novo_cliente.id, {
+                'razao_social': novo_cliente.razao_social,
+                'cnpj': novo_cliente.cnpj,
+                'regime_tributario': novo_cliente.regime_tributario,
+                'origem': 'CSV'
+            })
             
             return jsonify({
                 'sucesso': True,
@@ -794,6 +838,19 @@ def consolidar_csv(current_user):
                         deve_substituir = substituicoes.get(arquivo_id, {}).get(chave_competencia, False)
                         
                         if deve_substituir:
+                            # Conta o número de notas antes de deletar
+                            total_notas_antigo = len(processamento_existente.detalhes) if processamento_existente.detalhes else 0
+                            
+                            # Registra log da exclusão (substituição)
+                            log_action(current_user.id, 'DELETE', 'FATURAMENTO', processamento_existente.id, {
+                                'cliente_id': cliente_id,
+                                'cliente_nome': cliente.razao_social,
+                                'mes': mes,
+                                'ano': ano,
+                                'total_notas': total_notas_antigo,
+                                'motivo': 'Substituído por nova importação'
+                            })
+                            
                             # Remove o processamento antigo e suas notas
                             FaturamentoDetalhe.query.filter_by(
                                 processamento_id=processamento_existente.id
@@ -866,6 +923,16 @@ def consolidar_csv(current_user):
                     db.session.add(novo_processamento)
                     # Commit individual para que o próximo cálculo tenha os dados corretos (igual ao seed)
                     db.session.commit()
+                    
+                    # Registra log de auditoria da importação
+                    log_action(current_user.id, 'CREATE', 'FATURAMENTO', novo_processamento.id, {
+                        'cliente_id': cliente_id,
+                        'cliente_nome': cliente.razao_social,
+                        'mes': mes,
+                        'ano': ano,
+                        'total_notas': len(competencia['notas']),
+                        'faturamento_total': float(faturamento_total)
+                    })
                     
                     resultados.append({
                         'arquivo': arquivo_data['nome_arquivo'],

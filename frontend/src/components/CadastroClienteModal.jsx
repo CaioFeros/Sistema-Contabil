@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, AlertCircle, CheckCircle, Building } from 'lucide-react';
 import { cadastrarClienteCSV } from '../services/importacaoApi';
 import { formatarErroImportacao } from '../utils/errosImportacao';
@@ -11,6 +11,12 @@ import ErroDetalhado from './ErroDetalhado';
 const CadastroClienteModal = ({ cnpj, razaoSocial, onCadastrado, onCancelar }) => {
   const [cadastrando, setCadastrando] = useState(false);
   const [erro, setErro] = useState(null); // Agora é objeto
+
+  // Reseta o estado quando o CNPJ muda (novo cliente)
+  useEffect(() => {
+    setCadastrando(false);
+    setErro(null);
+  }, [cnpj]);
 
   const handleCadastrar = async () => {
     setCadastrando(true);

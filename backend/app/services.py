@@ -4,8 +4,32 @@ import pandas as pd
 from decimal import Decimal
 from datetime import datetime, timedelta
 from .models import db, Cliente, Processamento, FaturamentoDetalhe
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 
+def _filtro_periodo(ano_col, mes_col, data_inicial, data_final):
+    """
+    Cria um filtro de período compatível com SQLite e PostgreSQL.
+    Compara ano e mês separadamente ao invés de usar make_date.
+    """
+    ano_inicial = data_inicial.year
+    mes_inicial = data_inicial.month
+    ano_final = data_final.year
+    mes_final = data_final.month
+    
+    # Caso simples: mesmo ano
+    if ano_inicial == ano_final:
+        return and_(
+            ano_col == ano_inicial,
+            mes_col >= mes_inicial,
+            mes_col <= mes_final
+        )
+    
+    # Caso complexo: anos diferentes
+    return or_(
+        and_(ano_col == ano_inicial, mes_col >= mes_inicial),
+        and_(ano_col > ano_inicial, ano_col < ano_final),
+        and_(ano_col == ano_final, mes_col <= mes_final)
+    )
 
 def calcular_impostos(faturamento, regime_tributario):
     """Calcula o imposto com base no regime tributário (simplificado)."""
@@ -38,8 +62,7 @@ def calcular_imposto_simples_nacional(cliente_id, mes_calculo, ano_calculo, fatu
             func.sum(Processamento.faturamento_total)
         ).filter(
             Processamento.cliente_id == cliente_id,
-            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial,
-            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final
+            _filtro_periodo(Processamento.ano, Processamento.mes, data_inicial, data_final)
         ).scalar()
 
         rbt12 = Decimal(resultado or 0)
@@ -146,8 +169,7 @@ def gerar_relatorio_faturamento(params):
         data_final = hoje.replace(day=1) - timedelta(days=1)
 
         query = query.filter(
-            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial,
-            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final
+            _filtro_periodo(Processamento.ano, Processamento.mes, data_inicial, data_final)
         )
     elif tipo_filtro == 'periodo' and data_inicio_str and data_fim_str:
         try:
@@ -164,11 +186,10 @@ def gerar_relatorio_faturamento(params):
                 primeiro_dia_prox_mes = datetime(data_fim_dt.year + 1, 1, 1)
             else:
                 primeiro_dia_prox_mes = datetime(data_fim_dt.year, data_fim_dt.month + 1, 1)
-            data_fim = (primeiro_dia_prox_mes - timedelta(days=1)).date()
+            data_fim = (primeiro_dia_prox_mes - timedelta(days=1))
             
             query = query.filter(
-                func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicio,
-                func.make_date(Processamento.ano, Processamento.mes, 1) <= data_fim
+                _filtro_periodo(Processamento.ano, Processamento.mes, data_inicio, data_fim)
             )
         except ValueError:
             raise ValueError("Formato de data inválido para o período. Use YYYY-MM.")
@@ -204,15 +225,38 @@ def gerar_relatorio_faturamento(params):
             func.sum(Processamento.faturamento_total)
         ).filter(
             Processamento.cliente_id == cliente_id,
-            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial_rbt12,
-            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final_rbt12
+            _filtro_periodo(Processamento.ano, Processamento.mes, data_inicial_rbt12, data_final_rbt12)
         ).scalar()
         rbt12 = Decimal(rbt12_query_result or 0)
 
         # Cálculo da alíquota efetiva para o mês p
+        # IMPORTANTE: Não usar p.imposto_calculado pois ele foi calculado na época do processamento
+        # com um RBT12 diferente. Precisamos recalcular baseado no RBT12 atual.
         aliquota_efetiva = Decimal(0)
-        if p.faturamento_total > 0:
-            aliquota_efetiva = p.imposto_calculado / p.faturamento_total
+        if rbt12 > 0:
+            # Definir as faixas de alíquota do Anexo III (mesmo que em calcular_imposto_simples_nacional)
+            faixas_sn = [
+                {"limite": Decimal("180000.00"), "aliquota": Decimal("0.06"), "deducao": Decimal("0")},
+                {"limite": Decimal("360000.00"), "aliquota": Decimal("0.112"), "deducao": Decimal("9360.00")},
+                {"limite": Decimal("720000.00"), "aliquota": Decimal("0.135"), "deducao": Decimal("17640.00")},
+                {"limite": Decimal("1800000.00"), "aliquota": Decimal("0.16"), "deducao": Decimal("35640.00")},
+                {"limite": Decimal("3600000.00"), "aliquota": Decimal("0.21"), "deducao": Decimal("125640.00")},
+                {"limite": Decimal("4800000.00"), "aliquota": Decimal("0.33"), "deducao": Decimal("648000.00")}
+            ]
+            
+            # Encontrar a faixa correta e calcular a alíquota efetiva
+            for faixa in faixas_sn:
+                if rbt12 <= faixa["limite"]:
+                    aliquota_nominal = faixa["aliquota"]
+                    parcela_a_deduzir = faixa["deducao"]
+                    aliquota_efetiva = ((rbt12 * aliquota_nominal) - parcela_a_deduzir) / rbt12
+                    break
+            else: # Se RBT12 for maior que o limite máximo
+                ultima_faixa = faixas_sn[-1]
+                aliquota_efetiva = ((rbt12 * ultima_faixa["aliquota"]) - ultima_faixa["deducao"]) / rbt12
+        else:
+            # Se não houver faturamento anterior, usa a alíquota da primeira faixa
+            aliquota_efetiva = Decimal("0.06")
 
         # --- CÁLCULO DA ALÍQUOTA FUTURA ---
         # O RBT12 para o próximo mês inclui o faturamento do mês atual.
@@ -240,8 +284,7 @@ def gerar_relatorio_faturamento(params):
             func.sum(Processamento.faturamento_total)
         ).filter(
             Processamento.cliente_id == cliente_id,
-            func.make_date(Processamento.ano, Processamento.mes, 1) >= data_inicial_futura,
-            func.make_date(Processamento.ano, Processamento.mes, 1) <= data_final_futura
+            _filtro_periodo(Processamento.ano, Processamento.mes, data_inicial_futura, data_final_futura)
         ).scalar()
         rbt12_futuro = Decimal(rbt12_futuro_result or 0)
 

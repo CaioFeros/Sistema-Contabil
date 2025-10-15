@@ -16,17 +16,24 @@ from app.services import calcular_impostos, calcular_imposto_simples_nacional
 # --- FUNÇÕES DO SCRIPT ---
 
 def criar_usuario_padrao():
-    """Cria um usuário padrão para login se ele não existir."""
-    print("Verificando/Criando usuário padrão...", flush=True)
-    email_padrao = "dev@exemplo.com"
+    """Cria um usuário admin padrão para login se ele não existir."""
+    print("Verificando/Criando usuário admin padrão...", flush=True)
+    email_padrao = "admin@sistema.com"
     if not Usuario.query.filter_by(email=email_padrao).first():
-        senha_hash = generate_password_hash("senha123", method='pbkdf2:sha256')
-        novo_usuario = Usuario(email=email_padrao, senha_hash=senha_hash)
+        senha_hash = generate_password_hash("admin123", method='pbkdf2:sha256')
+        novo_usuario = Usuario(
+            email=email_padrao, 
+            senha_hash=senha_hash,
+            nome="Administrador",
+            papel="ADMIN"
+        )
         db.session.add(novo_usuario)
         db.session.commit()
-        print(f"Usuário '{email_padrao}' criado com sucesso.", flush=True)
+        print(f"Usuário admin '{email_padrao}' criado com sucesso.", flush=True)
+        print("Login: admin@sistema.com", flush=True)
+        print("Senha: admin123", flush=True)
     else:
-        print(f"Usuário '{email_padrao}' já existe.", flush=True)
+        print(f"Usuário admin '{email_padrao}' já existe.", flush=True)
 
 def limpar_dados():
     """Apaga todos os dados das tabelas relacionadas para evitar duplicatas."""
