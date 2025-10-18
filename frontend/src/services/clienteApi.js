@@ -90,3 +90,15 @@ export const deleteCliente = async (id) => {
         throw error;
     }
 };
+
+// Export default para facilitar imports
+const clienteApi = {
+    listar: getClientes,
+    buscar: getClienteById,
+    criar: createCliente,
+    atualizar: updateCliente,
+    excluir: deleteCliente,
+    consultarCNPJ
+};
+
+export default clienteApi;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { History, Trash2, ArrowLeft, User, Calendar, Filter } from 'lucide-react';
+import { History, Trash2, ArrowLeft, User, Calendar, Filter, Database, HardDrive, AlertTriangle } from 'lucide-react';
 
 function HistoricoAtividades() {
     const navigate = useNavigate();
@@ -15,11 +15,27 @@ function HistoricoAtividades() {
     });
     const [usuarios, setUsuarios] = useState([]);
     const [paginacao, setPaginacao] = useState({});
+    const [estatisticas, setEstatisticas] = useState(null);
+    const [loadingLimpeza, setLoadingLimpeza] = useState(false);
+    const [menuLimpezaAberto, setMenuLimpezaAberto] = useState(false);
 
     useEffect(() => {
         carregarAtividades();
         carregarUsuarios();
+        carregarEstatisticas();
     }, [filtros.page, filtros.per_page]);
+
+    // Fechar menu ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuLimpezaAberto && !event.target.closest('#menu-limpeza-container')) {
+                setMenuLimpezaAberto(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [menuLimpezaAberto]);
 
     const carregarAtividades = async () => {
         try {
@@ -72,6 +88,24 @@ function HistoricoAtividades() {
         }
     };
 
+    const carregarEstatisticas = async () => {
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch('/api/atividades/estatisticas', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setEstatisticas(data);
+            }
+        } catch (err) {
+            console.error('Erro ao carregar estatísticas:', err);
+        }
+    };
+
     const handleDesfazer = async (logId, descricao) => {
         if (!confirm(`Tem certeza que deseja desfazer esta atividade?\n\n"${descricao}"`)) {
             return;
@@ -107,6 +141,55 @@ function HistoricoAtividades() {
     const limparFiltros = () => {
         setFiltros({ tipo: '', usuario_id: '', page: 1, per_page: 50 });
         setTimeout(() => carregarAtividades(), 100);
+    };
+
+    const handleLimparLixeira = async (tipo) => {
+        const mensagens = {
+            'restaurados': 'Deseja remover apenas os itens já restaurados da lixeira?',
+            'todos': 'ATENÇÃO: Esta ação irá remover TODOS os itens da lixeira permanentemente!\n\nItens não restaurados serão perdidos definitivamente.\n\nTem certeza?',
+            'nao_restaurados': 'ATENÇÃO: Esta ação irá remover todos os itens NÃO RESTAURADOS da lixeira!\n\nVocê não poderá mais recuperar esses itens.\n\nTem certeza?'
+        };
+
+        if (!confirm(mensagens[tipo])) {
+            return;
+        }
+
+        try {
+            setLoadingLimpeza(true);
+            const token = localStorage.getItem('authToken');
+            const response = await fetch('/api/atividades/limpar-lixeira', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ tipo })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.erro || 'Erro ao limpar lixeira');
+            }
+
+            alert(data.mensagem);
+            carregarEstatisticas(); // Recarrega estatísticas
+            carregarAtividades(); // Recarrega atividades
+        } catch (err) {
+            alert('Erro: ' + err.message);
+        } finally {
+            setLoadingLimpeza(false);
+        }
+    };
+
+    const formatarTamanho = (bytes, mb) => {
+        if (mb >= 1) {
+            return `${mb} MB`;
+        } else if (bytes >= 1024) {
+            return `${(bytes / 1024).toFixed(2)} KB`;
+        } else {
+            return `${bytes} bytes`;
+        }
     };
 
     const formatarData = (dataString) => {
@@ -149,6 +232,135 @@ function HistoricoAtividades() {
             {error && (
                 <div className="bg-red-100 dark:bg-red-900/40 border-2 border-red-400 dark:border-red-700 px-4 py-3 rounded-lg">
                     <p className="text-sm font-semibold text-red-900 dark:text-red-100">{error}</p>
+                </div>
+            )}
+
+            {/* Estatísticas de Armazenamento */}
+            {estatisticas && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Card Banco de Dados */}
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg shadow p-6 border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">
+                                        Banco de Dados
+                                    </h3>
+                                </div>
+                                <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">
+                                    {formatarTamanho(estatisticas.tamanho_banco_bytes, estatisticas.tamanho_banco_mb)}
+                                </p>
+                                <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                                    Tamanho total do arquivo
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <div className="bg-blue-200 dark:bg-blue-800 rounded-full p-3">
+                                    <HardDrive className="w-6 h-6 text-blue-700 dark:text-blue-300" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card Lixeira/Backup */}
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg shadow p-6 border border-purple-200 dark:border-purple-800">
+                        <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Trash2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                    <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">
+                                        Lixeira (Backup)
+                                    </h3>
+                                </div>
+                                <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">
+                                    {formatarTamanho(estatisticas.tamanho_backup_bytes, estatisticas.tamanho_backup_mb)}
+                                </p>
+                                <div className="mt-2 space-y-1">
+                                    <p className="text-sm text-purple-600 dark:text-purple-400">
+                                        📦 Total: {estatisticas.total_itens_lixeira} itens
+                                    </p>
+                                    <p className="text-sm text-purple-600 dark:text-purple-400">
+                                        🔄 Não restaurados: {estatisticas.itens_nao_restaurados}
+                                    </p>
+                                    <p className="text-sm text-purple-600 dark:text-purple-400">
+                                        ✅ Restaurados: {estatisticas.itens_restaurados}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right ml-4">
+                                <div className="bg-purple-200 dark:bg-purple-800 rounded-full p-3 mb-3">
+                                    <Database className="w-6 h-6 text-purple-700 dark:text-purple-300" />
+                                </div>
+                                {/* Botão Limpar Lixeira */}
+                                <div id="menu-limpeza-container" className="relative group">
+                                    <button
+                                        onClick={() => setMenuLimpezaAberto(!menuLimpezaAberto)}
+                                        disabled={loadingLimpeza || estatisticas.total_itens_lixeira === 0}
+                                        className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        title="Limpar Lixeira"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Limpar
+                                    </button>
+                                    
+                                    {/* Menu de Opções */}
+                                    {menuLimpezaAberto && (
+                                        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
+                                            <div className="p-2 space-y-1">
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuLimpezaAberto(false);
+                                                        handleLimparLixeira('restaurados');
+                                                    }}
+                                                    disabled={estatisticas.itens_restaurados === 0}
+                                                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    🔄 Limpar Restaurados ({estatisticas.itens_restaurados})
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuLimpezaAberto(false);
+                                                        handleLimparLixeira('nao_restaurados');
+                                                    }}
+                                                    disabled={estatisticas.itens_nao_restaurados === 0}
+                                                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-orange-100 dark:hover:bg-orange-900/20 text-orange-700 dark:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    ⚠️ Limpar Não Restaurados ({estatisticas.itens_nao_restaurados})
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuLimpezaAberto(false);
+                                                        handleLimparLixeira('todos');
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-red-700 dark:text-red-300 font-semibold"
+                                                >
+                                                    🗑️ Limpar Tudo ({estatisticas.total_itens_lixeira})
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Estatísticas por Tipo */}
+                        {estatisticas.tipos_entidade && estatisticas.tipos_entidade.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-purple-200 dark:border-purple-700">
+                                <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-2">
+                                    Por Tipo:
+                                </p>
+                                <div className="space-y-1">
+                                    {estatisticas.tipos_entidade.map((tipo) => (
+                                        <div key={tipo.tipo} className="flex justify-between text-xs text-purple-600 dark:text-purple-400">
+                                            <span>{tipo.tipo}:</span>
+                                            <span>{tipo.nao_restaurados} de {tipo.total}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -236,10 +448,10 @@ function HistoricoAtividades() {
                                             <button
                                                 onClick={() => handleDesfazer(atividade.id, atividade.descricao)}
                                                 className="ml-4 flex items-center gap-2 px-3 py-2 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
-                                                title="Desfazer operação"
+                                                title={atividade.acao === 'DELETE' ? 'Restaurar da lixeira' : 'Desfazer operação'}
                                             >
                                                 <Trash2 className="w-4 h-4" />
-                                                Desfazer
+                                                {atividade.acao === 'DELETE' ? 'Restaurar' : 'Desfazer'}
                                             </button>
                                         )}
                                     </div>

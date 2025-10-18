@@ -1,0 +1,223 @@
+{
+  "usuarios": [
+    {
+      "username": "admin",
+      "email": "admin@exemplo.com",
+      "senha": "admin123",
+      "nome": "Administrador do Sistema",
+      "papel": "ADMIN"
+    },
+    {
+      "username": "usuario",
+      "email": "usuario@exemplo.com",
+      "senha": "usuario123",
+      "nome": "Usuário Padrão",
+      "papel": "USER"
+    }
+  ],
+  "contadores": [
+    {
+      "nome": "João Silva Contador",
+      "cpf": "123.456.789-00",
+      "crc": "CRC/SP 123456",
+      "email": "joao.silva@contabilidade.com",
+      "telefone": "(11) 98765-4321",
+      "endereco": "Rua das Flores, 123",
+      "cidade": "São Paulo",
+      "estado": "SP",
+      "cep": "01234-567"
+    },
+    {
+      "nome": "Maria Oliveira Santos",
+      "cpf": "987.654.321-00",
+      "crc": "CRC/RJ 654321",
+      "email": "maria.oliveira@contabilidade.com",
+      "telefone": "(21) 91234-5678",
+      "endereco": "Av. Atlântica, 456",
+      "cidade": "Rio de Janeiro",
+      "estado": "RJ",
+      "cep": "22070-010"
+    }
+  ],
+  "clientes": [
+    {
+      "razao_social": "TechStart Inovações Ltda",
+      "cnpj": "12.345.678/0001-90",
+      "regime_tributario": "Simples Nacional",
+      "nome_fantasia": "TechStart",
+      "data_abertura": "15/03/2020",
+      "situacao_cadastral": "ATIVA",
+      "data_situacao": "15/03/2020",
+      "natureza_juridica": "Sociedade Empresária Limitada",
+      "cnae_principal": "6201-5/00 - Desenvolvimento de programas de computador sob encomenda",
+      "logradouro": "Rua das Startups",
+      "numero": "100",
+      "complemento": "Sala 201",
+      "bairro": "Centro",
+      "cep": "01310-100",
+      "municipio": "São Paulo",
+      "uf": "SP",
+      "telefone1": "(11) 3000-1234",
+      "email": "contato@techstart.com.br",
+      "capital_social": "50000.00",
+      "porte": "MICRO EMPRESA",
+      "opcao_simples": "SIM",
+      "data_opcao_simples": "15/03/2020",
+      "opcao_mei": "NAO",
+      "valor_honorarios": "850.00"
+    },
+    {
+      "razao_social": "Comercial BomPreço S.A.",
+      "cnpj": "23.456.789/0001-01",
+      "regime_tributario": "Lucro Real",
+      "nome_fantasia": "BomPreço Supermercados",
+      "data_abertura": "10/01/2015",
+      "situacao_cadastral": "ATIVA",
+      "data_situacao": "10/01/2015",
+      "natureza_juridica": "Sociedade Anônima Fechada",
+      "cnae_principal": "4711-3/02 - Comércio varejista de mercadorias em geral",
+      "logradouro": "Av. Comercial",
+      "numero": "500",
+      "bairro": "Jardim América",
+      "cep": "01420-000",
+      "municipio": "São Paulo",
+      "uf": "SP",
+      "telefone1": "(11) 3500-5000",
+      "telefone2": "(11) 3500-5001",
+      "email": "financeiro@bompreco.com.br",
+      "capital_social": "500000.00",
+      "porte": "EMPRESA DE PEQUENO PORTE",
+      "opcao_simples": "NAO",
+      "opcao_mei": "NAO",
+      "valor_honorarios": "2500.00"
+    },
+    {
+      "razao_social": "Consultoria Excelência EIRELI",
+      "cnpj": "34.567.890/0001-12",
+      "regime_tributario": "Lucro Presumido",
+      "nome_fantasia": "Excelência Consultoria",
+      "data_abertura": "20/06/2018",
+      "situacao_cadastral": "ATIVA",
+      "data_situacao": "20/06/2018",
+      "natureza_juridica": "Empresa Individual de Responsabilidade Limitada",
+      "cnae_principal": "7020-4/00 - Atividades de consultoria em gestão empresarial",
+      "logradouro": "Rua dos Consultores",
+      "numero": "250",
+      "complemento": "Conjunto 1001",
+      "bairro": "Brooklin",
+      "cep": "04571-000",
+      "municipio": "São Paulo",
+      "uf": "SP",
+      "telefone1": "(11) 4000-2000",
+      "email": "contato@excelencia.com.br",
+      "capital_social": "100000.00",
+      "porte": "MICRO EMPRESA",
+      "opcao_simples": "NAO",
+      "opcao_mei": "NAO",
+      "valor_honorarios": "1200.00"
+    },
+    {
+      "razao_social": "Indústria MecânicaPro Ltda",
+      "cnpj": "45.678.901/0001-23",
+      "regime_tributario": "Lucro Presumido",
+      "nome_fantasia": "MecânicaPro",
+      "data_abertura": "05/09/2016",
+      "situacao_cadastral": "ATIVA",
+      "data_situacao": "05/09/2016",
+      "natureza_juridica": "Sociedade Empresária Limitada",
+      "cnae_principal": "2532-2/01 - Produção de artefatos estampados de metal",
+      "logradouro": "Estrada Industrial",
+      "numero": "1500",
+      "bairro": "Distrito Industrial",
+      "cep": "09810-000",
+      "municipio": "São Bernardo do Campo",
+      "uf": "SP",
+      "telefone1": "(11) 4350-8000",
+      "email": "vendas@mecanicapro.com.br",
+      "capital_social": "300000.00",
+      "porte": "EMPRESA DE PEQUENO PORTE",
+      "opcao_simples": "NAO",
+      "opcao_mei": "NAO",
+      "valor_honorarios": "1800.00"
+    },
+    {
+      "razao_social": "Serviços Digitais Web ME",
+      "cnpj": "56.789.012/0001-34",
+      "regime_tributario": "Simples Nacional",
+      "nome_fantasia": "Web Digital",
+      "data_abertura": "12/11/2021",
+      "situacao_cadastral": "ATIVA",
+      "data_situacao": "12/11/2021",
+      "natureza_juridica": "Sociedade Empresária Limitada",
+      "cnae_principal": "6311-9/00 - Tratamento de dados, provedores de serviços de aplicação",
+      "logradouro": "Rua Digital",
+      "numero": "88",
+      "complemento": "Andar 5",
+      "bairro": "Vila Mariana",
+      "cep": "04101-000",
+      "municipio": "São Paulo",
+      "uf": "SP",
+      "telefone1": "(11) 2500-3000",
+      "email": "contato@webdigital.com.br",
+      "capital_social": "20000.00",
+      "porte": "MICRO EMPRESA",
+      "opcao_simples": "SIM",
+      "data_opcao_simples": "12/11/2021",
+      "opcao_mei": "NAO",
+      "valor_honorarios": "650.00"
+    }
+  ],
+  "processamentos_exemplo": [
+    {
+      "cliente_cnpj": "12.345.678/0001-90",
+      "mes": 1,
+      "ano": 2025,
+      "faturamento_total": 45000.00,
+      "nome_arquivo_original": "faturamento_jan_2025.csv",
+      "detalhes": [
+        {
+          "descricao_servico": "Desenvolvimento de Software",
+          "valor": 35000.00
+        },
+        {
+          "descricao_servico": "Consultoria Técnica",
+          "valor": 10000.00
+        }
+      ]
+    },
+    {
+      "cliente_cnpj": "23.456.789/0001-01",
+      "mes": 1,
+      "ano": 2025,
+      "faturamento_total": 580000.00,
+      "nome_arquivo_original": "vendas_jan_2025.csv",
+      "detalhes": [
+        {
+          "descricao_servico": "Vendas de Mercadorias",
+          "valor": 580000.00
+        }
+      ]
+    }
+  ],
+  "recibos_exemplo": [
+    {
+      "cliente_cnpj": "12.345.678/0001-90",
+      "contador_cpf": "123.456.789-00",
+      "mes": 1,
+      "ano": 2025,
+      "valor": 850.00,
+      "tipo_servico": "honorarios",
+      "descricao_servico": "Serviços de Contabilidade - Janeiro/2025"
+    },
+    {
+      "cliente_cnpj": "23.456.789/0001-01",
+      "contador_cpf": "987.654.321-00",
+      "mes": 1,
+      "ano": 2025,
+      "valor": 2500.00,
+      "tipo_servico": "honorarios",
+      "descricao_servico": "Serviços de Contabilidade e Assessoria Fiscal - Janeiro/2025"
+    }
+  ]
+}
+

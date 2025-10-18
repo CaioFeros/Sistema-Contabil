@@ -32,7 +32,8 @@ function AdicionarClienteModal({ onClose, onClienteAdded }) {
         opcaoMEI: '',
         dataExclusaoSimples: '',
         situacaoEspecial: '',
-        dataSituacaoEspecial: ''
+        dataSituacaoEspecial: '',
+        valorHonorarios: '500.00'
     });
     const [buscandoCNPJ, setBuscandoCNPJ] = useState(false);
     const [salvando, setSalvando] = useState(false);
@@ -164,7 +165,8 @@ function AdicionarClienteModal({ onClose, onClienteAdded }) {
                 opcao_mei: dadosCliente.opcaoMEI,
                 data_exclusao_simples: dadosCliente.dataExclusaoSimples,
                 situacao_especial: dadosCliente.situacaoEspecial,
-                data_situacao_especial: dadosCliente.dataSituacaoEspecial
+                data_situacao_especial: dadosCliente.dataSituacaoEspecial,
+                valor_honorarios: dadosCliente.valorHonorarios ? parseFloat(dadosCliente.valorHonorarios) : null
             };
             
             await createCliente(novoCliente);
@@ -303,6 +305,32 @@ function AdicionarClienteModal({ onClose, onClienteAdded }) {
                                 </div>
 
                                 <div>
+                                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                        Valor Honorários Mensais (R$)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={dadosCliente.valorHonorarios}
+                                        onChange={(e) => handleInputChange('valorHonorarios', e.target.value)}
+                                        onBlur={(e) => {
+                                            const value = parseFloat(e.target.value);
+                                            if (!isNaN(value) && value > 0) {
+                                                handleInputChange('valorHonorarios', value.toFixed(2));
+                                            } else if (!e.target.value || e.target.value === '') {
+                                                handleInputChange('valorHonorarios', '500.00');
+                                            }
+                                        }}
+                                        placeholder="500.00"
+                                        step="0.01"
+                                        min="0"
+                                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Valor padrão para recibos de honorários
+                                    </p>
+                                </div>
+
+                                <div className="md:col-span-2">
                                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
                                         Nome Fantasia
                                     </label>

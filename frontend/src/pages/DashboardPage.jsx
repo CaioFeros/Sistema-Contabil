@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Users, FileText, History } from 'lucide-react';
+import { Shield, Users, FileText, History, Receipt, UserCog } from 'lucide-react';
 
 const NavButton = ({ to, children }) => (
     <Link
@@ -78,6 +78,20 @@ function DashboardPage() {
                 <NavButton to="/app/relatorios">
                     Gerar Relatórios
                 </NavButton>
+                <NavButton to="/app/recibos">
+                    <div className="flex flex-col items-center gap-2">
+                        <Receipt className="w-8 h-8" />
+                        <span>Emitir Recibo</span>
+                    </div>
+                </NavButton>
+                {isAdmin && (
+                    <NavButton to="/app/gerenciar-contador">
+                        <div className="flex flex-col items-center gap-2">
+                            <UserCog className="w-8 h-8" />
+                            <span>Cadastrar Contador</span>
+                        </div>
+                    </NavButton>
+                )}
             </div>
 
             {/* Seção de Administração */}

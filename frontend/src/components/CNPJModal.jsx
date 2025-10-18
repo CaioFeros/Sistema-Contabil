@@ -64,10 +64,11 @@ function CNPJModal({ cliente, onClose, onClienteDeleted }) {
                     porte: data.porte || '',
                     opcaoSimples: data.opcao_simples || '',
                     dataOpcaoSimples: data.data_opcao_simples || '',
-                    opcaoMEI: data.opcao_mei || '',
-                    dataExclusaoSimples: data.data_exclusao_simples || '',
-                    situacaoEspecial: data.situacao_especial || '',
-                    dataSituacaoEspecial: data.data_situacao_especial || ''
+                                    opcaoMEI: data.opcao_mei || '',
+                                    dataExclusaoSimples: data.data_exclusao_simples || '',
+                                    situacaoEspecial: data.situacao_especial || '',
+                                    dataSituacaoEspecial: data.data_situacao_especial || '',
+                                    valorHonorarios: data.valor_honorarios || '500.00'
                 });
                 setError(null);
             } catch (err) {
@@ -243,7 +244,8 @@ function CNPJModal({ cliente, onClose, onClienteDeleted }) {
                 opcao_mei: dadosCNPJ.opcaoMEI,
                 data_exclusao_simples: dadosCNPJ.dataExclusaoSimples,
                 situacao_especial: dadosCNPJ.situacaoEspecial,
-                data_situacao_especial: dadosCNPJ.dataSituacaoEspecial
+                data_situacao_especial: dadosCNPJ.dataSituacaoEspecial,
+                valor_honorarios: dadosCNPJ.valorHonorarios ? parseFloat(dadosCNPJ.valorHonorarios) : null
             };
             
             await updateCliente(cliente.id, dataToSave);
@@ -455,6 +457,36 @@ function CNPJModal({ cliente, onClose, onClienteDeleted }) {
                             </div>
                             <InputField label="Razão Social" value={dadosCNPJ.razaoSocial} field="razaoSocial" onChange={handleInputChange} disabled={!isEditing} />
                             <InputField label="Regime Tributário" value={dadosCNPJ.regimeTributario} field="regimeTributario" onChange={handleInputChange} disabled={!isEditing} />
+                            <div className="mb-4">
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    Valor Honorários Mensais (R$)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={dadosCNPJ.valorHonorarios || '500.00'}
+                                    onChange={(e) => handleInputChange('valorHonorarios', e.target.value)}
+                                    onBlur={(e) => {
+                                        const value = parseFloat(e.target.value);
+                                        if (!isNaN(value) && value > 0) {
+                                            handleInputChange('valorHonorarios', value.toFixed(2));
+                                        } else if (!e.target.value || e.target.value === '') {
+                                            handleInputChange('valorHonorarios', '500.00');
+                                        }
+                                    }}
+                                    disabled={!isEditing}
+                                    placeholder="500.00"
+                                    step="0.01"
+                                    min="0"
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                                        !isEditing
+                                            ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400'
+                                            : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'
+                                    } transition-colors`}
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Valor padrão para recibos de honorários
+                                </p>
+                            </div>
                             <InputField label="Nome Fantasia" value={dadosCNPJ.nomeFantasia} field="nomeFantasia" onChange={handleInputChange} disabled={!isEditing} />
                             <InputField label="Data de Abertura" value={dadosCNPJ.dataAbertura} field="dataAbertura" onChange={handleInputChange} disabled={!isEditing} />
                         </div>

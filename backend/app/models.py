@@ -76,6 +76,9 @@ class Cliente(db.Model):
     situacao_especial = db.Column(db.String(200))
     data_situacao_especial = db.Column(db.String(10))
     
+    # Valor de Honorários
+    valor_honorarios = db.Column(db.Numeric(10, 2))
+    
     def to_dict(self):
         """Converte o objeto Cliente para um dicionário"""
         import json
@@ -109,7 +112,8 @@ class Cliente(db.Model):
             'opcao_mei': self.opcao_mei,
             'data_exclusao_simples': self.data_exclusao_simples,
             'situacao_especial': self.situacao_especial,
-            'data_situacao_especial': self.data_situacao_especial
+            'data_situacao_especial': self.data_situacao_especial,
+            'valor_honorarios': float(self.valor_honorarios) if self.valor_honorarios else None
         }
 
 class Processamento(db.Model):
@@ -158,4 +162,107 @@ class LogAuditoria(db.Model):
             'detalhes': json.loads(self.detalhes) if self.detalhes else {},
             'data_acao': self.data_acao.isoformat(),
             'ip_address': self.ip_address
+        }
+
+class Contador(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(200), nullable=False)
+    cpf = db.Column(db.String(14), nullable=False, unique=True)
+    crc = db.Column(db.String(50), nullable=False)
+    pix = db.Column(db.String(100), nullable=False)
+    banco = db.Column(db.String(100), nullable=False)
+    agencia = db.Column(db.String(20), nullable=False)
+    conta_corrente = db.Column(db.String(20), nullable=False)
+    imagem_assinatura = db.Column(db.Text)  # Base64 da imagem
+    imagem_logo = db.Column(db.Text)  # Base64 da imagem
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'cpf': self.cpf,
+            'crc': self.crc,
+            'pix': self.pix,
+            'banco': self.banco,
+            'agencia': self.agencia,
+            'conta_corrente': self.conta_corrente,
+            'imagem_assinatura': self.imagem_assinatura,
+            'imagem_logo': self.imagem_logo,
+            'ativo': self.ativo,
+            'data_criacao': self.data_criacao.isoformat() if self.data_criacao else None,
+            'data_atualizacao': self.data_atualizacao.isoformat() if self.data_atualizacao else None
+        }
+
+class Recibo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('cliente.id'), nullable=False)
+    contador_id = db.Column(db.Integer, db.ForeignKey('contador.id'), nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
+    tipo_servico = db.Column(db.String(50), nullable=False, default='honorarios')  # 'honorarios' ou 'outros'
+    descricao_servico = db.Column(db.String(300))  # Usado quando tipo_servico = 'outros'
+    numero_recibo = db.Column(db.String(50), unique=True)  # Número único do recibo
+    data_emissao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    usuario_emitente_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    
+    cliente = db.relationship('Cliente')
+    contador = db.relationship('Contador')
+    usuario_emitente = db.relationship('Usuario')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'cliente_id': self.cliente_id,
+            'cliente': self.cliente.to_dict() if self.cliente else None,
+            'contador_id': self.contador_id,
+            'contador': self.contador.to_dict() if self.contador else None,
+            'mes': self.mes,
+            'ano': self.ano,
+            'valor': float(self.valor),
+            'tipo_servico': self.tipo_servico,
+            'descricao_servico': self.descricao_servico,
+            'numero_recibo': self.numero_recibo,
+            'data_emissao': self.data_emissao.isoformat() if self.data_emissao else None,
+            'usuario_emitente_id': self.usuario_emitente_id,
+            'usuario_emitente_nome': self.usuario_emitente.nome if self.usuario_emitente else None
+        }
+
+class ItemExcluido(db.Model):
+    """Armazena itens excluídos para permitir recuperação (lixeira)"""
+    __tablename__ = 'itens_excluidos'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tipo_entidade = db.Column(db.String(50), nullable=False)  # 'CLIENTE', 'PROCESSAMENTO', 'RECIBO', etc.
+    entidade_id_original = db.Column(db.Integer, nullable=False)  # ID do item excluído
+    dados_json = db.Column(db.Text, nullable=False)  # Dados completos em JSON
+    data_exclusao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    usuario_exclusao_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    motivo_exclusao = db.Column(db.String(500))  # Opcional: motivo da exclusão
+    restaurado = db.Column(db.Boolean, default=False, nullable=False)  # Se foi restaurado
+    data_restauracao = db.Column(db.DateTime)
+    usuario_restauracao_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    
+    # Relacionamentos
+    usuario_exclusao = db.relationship('Usuario', foreign_keys=[usuario_exclusao_id])
+    usuario_restauracao = db.relationship('Usuario', foreign_keys=[usuario_restauracao_id])
+    
+    def to_dict(self):
+        import json
+        return {
+            'id': self.id,
+            'tipo_entidade': self.tipo_entidade,
+            'entidade_id_original': self.entidade_id_original,
+            'dados': json.loads(self.dados_json) if self.dados_json else None,
+            'data_exclusao': self.data_exclusao.isoformat() if self.data_exclusao else None,
+            'usuario_exclusao_id': self.usuario_exclusao_id,
+            'usuario_exclusao_nome': self.usuario_exclusao.nome if self.usuario_exclusao else None,
+            'motivo_exclusao': self.motivo_exclusao,
+            'restaurado': self.restaurado,
+            'data_restauracao': self.data_restauracao.isoformat() if self.data_restauracao else None,
+            'usuario_restauracao_id': self.usuario_restauracao_id,
+            'usuario_restauracao_nome': self.usuario_restauracao.nome if self.usuario_restauracao else None
         }

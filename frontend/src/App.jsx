@@ -10,6 +10,8 @@ import RelatoriosPage from './pages/RelatoriosPage';
 import GerenciarUsuarios from './pages/GerenciarUsuarios';
 import HistoricoLogs from './pages/HistoricoLogs';
 import HistoricoAtividades from './pages/HistoricoAtividades';
+import GerenciarContador from './pages/GerenciarContador';
+import EmissaoRecibo from './pages/EmissaoRecibo';
 import { ThemeProvider } from './context/ThemeContext';
 
  
@@ -40,6 +42,8 @@ function App() {
             <Route path="clientes" element={<GerenciarClientes />} />
             <Route path="faturamento" element={<FaturamentoPage />} />
             <Route path="relatorios" element={<RelatoriosPage />} />
+            <Route path="recibos" element={<EmissaoRecibo />} />
+            <Route path="gerenciar-contador" element={<GerenciarContador />} />
             
                 {/* Rotas de Administração */}
                 <Route path="admin/usuarios" element={<GerenciarUsuarios />} />

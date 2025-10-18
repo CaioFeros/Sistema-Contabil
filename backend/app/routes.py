@@ -3,11 +3,12 @@ from flask import request, jsonify, Blueprint, current_app
 import jwt
 from datetime import datetime
 import requests
-from .models import db, Cliente, Processamento, FaturamentoDetalhe
+from .models import db, Cliente, Processamento, FaturamentoDetalhe, Contador, Recibo, ItemExcluido
 from sqlalchemy.orm import joinedload
 from .auth import token_required
 from .services import processar_arquivo_faturamento, gerar_relatorio_faturamento, calcular_imposto_simples_nacional
 from .audit import log_action
+from .lixeira import salvar_na_lixeira
 
 api_bp = Blueprint('api', __name__, url_prefix='/api') # Blueprint principal da API
 
@@ -54,7 +55,8 @@ def create_cliente(current_user):
         opcao_mei=data.get('opcao_mei'),
         data_exclusao_simples=data.get('data_exclusao_simples'),
         situacao_especial=data.get('situacao_especial'),
-        data_situacao_especial=data.get('data_situacao_especial')
+        data_situacao_especial=data.get('data_situacao_especial'),
+        valor_honorarios=data.get('valor_honorarios')
     )
 
     db.session.add(novo_cliente)
@@ -76,7 +78,7 @@ def create_cliente(current_user):
 @token_required
 def get_clientes(current_user):
     clientes = Cliente.query.all()
-    resultado = [{"id": c.id, "razao_social": c.razao_social, "cnpj": c.cnpj, "regime_tributario": c.regime_tributario} for c in clientes]
+    resultado = [{"id": c.id, "razao_social": c.razao_social, "cnpj": c.cnpj, "regime_tributario": c.regime_tributario, "valor_honorarios": float(c.valor_honorarios) if c.valor_honorarios else None} for c in clientes]
     return jsonify(resultado)
 
 @api_bp.route("/clientes/<int:cliente_id>", methods=["GET"])
@@ -93,9 +95,11 @@ def get_cliente(current_user, cliente_id):
 @token_required
 def delete_cliente(current_user, cliente_id):
     """
-    Deleta um cliente e todos os seus dados relacionados (faturamentos e detalhes).
-    O cascade delete está configurado no modelo Processamento.
+    Move o cliente para a lixeira (soft delete).
+    Os processamentos relacionados são mantidos temporariamente.
     """
+    import json
+    
     cliente = Cliente.query.get(cliente_id)
     if not cliente:
         return jsonify({"erro": "Cliente não encontrado"}), 404
@@ -105,26 +109,36 @@ def delete_cliente(current_user, cliente_id):
         cnpj = cliente.cnpj
         regime_tributario = cliente.regime_tributario
         
-        # Busca e deleta todos os processamentos (que deletarão os detalhes em cascade)
+        # Conta processamentos relacionados
         processamentos = Processamento.query.filter_by(cliente_id=cliente_id).all()
         num_processamentos = len(processamentos)
         
-        # Registra logs de exclusão de cada processamento
+        # Remove processamentos relacionados primeiro (salva cada um na lixeira)
         for proc in processamentos:
             # Conta o número de notas (detalhes) do processamento
             total_notas = len(proc.detalhes) if proc.detalhes else 0
             
+            # Salva processamento na lixeira
+            salvar_na_lixeira('PROCESSAMENTO', proc, current_user.id, 'Excluído junto com o cliente')
+            
+            # Registra log de exclusão
             log_action(current_user.id, 'DELETE', 'FATURAMENTO', proc.id, {
                 'cliente_id': cliente_id,
                 'cliente_nome': razao_social,
                 'mes': proc.mes,
                 'ano': proc.ano,
                 'total_notas': total_notas,
-                'motivo': 'Excluído junto com o cliente'
+                'motivo': 'Excluído junto com o cliente (salvo na lixeira)'
             })
+            
+            # Remove do banco
             db.session.delete(proc)
         
-        # Deleta o cliente
+        # Salva o cliente na lixeira
+        item_lixeira = salvar_na_lixeira('CLIENTE', cliente, current_user.id, 
+                                         f'Cliente excluído com {num_processamentos} processamentos relacionados')
+        
+        # Deleta o cliente do banco principal
         db.session.delete(cliente)
         db.session.commit()
         
@@ -133,10 +147,12 @@ def delete_cliente(current_user, cliente_id):
             'razao_social': razao_social,
             'cnpj': cnpj,
             'regime_tributario': regime_tributario,
-            'num_processamentos': num_processamentos
+            'num_processamentos': num_processamentos,
+            'movido_para_lixeira': True,
+            'lixeira_id': item_lixeira.id
         })
         
-        current_app.logger.info(f"Cliente deletado: {razao_social} ({cnpj}) - {num_processamentos} processamentos removidos")
+        current_app.logger.info(f"Cliente movido para lixeira: {razao_social} ({cnpj}) - {num_processamentos} processamentos removidos")
         
         return jsonify({
             "mensagem": f"Cliente '{razao_social}' deletado com sucesso!",
@@ -234,6 +250,10 @@ def update_cliente(current_user, cliente_id):
         cliente.situacao_especial = data['situacao_especial']
     if 'data_situacao_especial' in data:
         cliente.data_situacao_especial = data['data_situacao_especial']
+    
+    # Honorários
+    if 'valor_honorarios' in data:
+        cliente.valor_honorarios = data['valor_honorarios']
     
     try:
         db.session.commit()
@@ -841,6 +861,10 @@ def consolidar_csv(current_user):
                             # Conta o número de notas antes de deletar
                             total_notas_antigo = len(processamento_existente.detalhes) if processamento_existente.detalhes else 0
                             
+                            # Salva o processamento na lixeira antes de substituir
+                            salvar_na_lixeira('PROCESSAMENTO', processamento_existente, current_user.id, 
+                                            'Substituído por nova importação')
+                            
                             # Registra log da exclusão (substituição)
                             log_action(current_user.id, 'DELETE', 'FATURAMENTO', processamento_existente.id, {
                                 'cliente_id': cliente_id,
@@ -848,7 +872,7 @@ def consolidar_csv(current_user):
                                 'mes': mes,
                                 'ano': ano,
                                 'total_notas': total_notas_antigo,
-                                'motivo': 'Substituído por nova importação'
+                                'motivo': 'Substituído por nova importação (salvo na lixeira)'
                             })
                             
                             # Remove o processamento antigo e suas notas
@@ -973,3 +997,369 @@ def consolidar_csv(current_user):
         db.session.rollback()
         current_app.logger.error(f"Erro na consolidação: {str(e)}", exc_info=True)
         return jsonify({'erro': f"Erro ao consolidar dados: {str(e)}"}), 500
+
+# ==================== ROTAS DE CONTADOR ====================
+
+@api_bp.route("/contadores", methods=["GET"])
+@token_required
+def get_contadores(current_user):
+    """Lista todos os contadores (apenas ativos)"""
+    contadores = Contador.query.filter_by(ativo=True).all()
+    return jsonify([contador.to_dict() for contador in contadores])
+
+@api_bp.route("/contadores/<int:contador_id>", methods=["GET"])
+@token_required
+def get_contador(current_user, contador_id):
+    """Busca um contador específico"""
+    contador = Contador.query.get(contador_id)
+    if not contador:
+        return jsonify({"erro": "Contador não encontrado"}), 404
+    return jsonify(contador.to_dict())
+
+@api_bp.route("/contadores", methods=["POST"])
+@token_required
+def create_contador(current_user):
+    """Cria um novo contador (apenas admin)"""
+    if current_user.papel != 'ADMIN':
+        return jsonify({"erro": "Acesso negado. Apenas administradores podem criar contadores."}), 403
+    
+    data = request.get_json()
+    
+    # Validação de campos obrigatórios
+    campos_obrigatorios = ['nome', 'cpf', 'crc', 'pix', 'banco', 'agencia', 'conta_corrente']
+    for campo in campos_obrigatorios:
+        if not data.get(campo):
+            return jsonify({"erro": f"O campo '{campo}' é obrigatório"}), 400
+    
+    # Verifica se já existe contador com esse CPF
+    if Contador.query.filter_by(cpf=data['cpf']).first():
+        return jsonify({"erro": f"Já existe um contador cadastrado com o CPF {data['cpf']}"}), 409
+    
+    novo_contador = Contador(
+        nome=data['nome'],
+        cpf=data['cpf'],
+        crc=data['crc'],
+        pix=data['pix'],
+        banco=data['banco'],
+        agencia=data['agencia'],
+        conta_corrente=data['conta_corrente'],
+        imagem_assinatura=data.get('imagem_assinatura'),
+        imagem_logo=data.get('imagem_logo')
+    )
+    
+    db.session.add(novo_contador)
+    db.session.commit()
+    
+    # Log de auditoria
+    log_action(current_user.id, 'CREATE', 'CONTADOR', novo_contador.id, {
+        'nome': novo_contador.nome,
+        'cpf': novo_contador.cpf,
+        'crc': novo_contador.crc
+    })
+    
+    return jsonify({
+        "mensagem": "Contador criado com sucesso!",
+        "contador": novo_contador.to_dict()
+    }), 201
+
+@api_bp.route("/contadores/<int:contador_id>", methods=["PUT"])
+@token_required
+def update_contador(current_user, contador_id):
+    """Atualiza um contador (apenas admin)"""
+    if current_user.papel != 'ADMIN':
+        return jsonify({"erro": "Acesso negado. Apenas administradores podem editar contadores."}), 403
+    
+    contador = Contador.query.get(contador_id)
+    if not contador:
+        return jsonify({"erro": "Contador não encontrado"}), 404
+    
+    data = request.get_json()
+    
+    # Atualiza os campos
+    campos_atualizaveis = ['nome', 'cpf', 'crc', 'pix', 'banco', 'agencia', 'conta_corrente', 
+                           'imagem_assinatura', 'imagem_logo', 'ativo']
+    
+    dados_alterados = {}
+    for campo in campos_atualizaveis:
+        if campo in data:
+            valor_antigo = getattr(contador, campo)
+            valor_novo = data[campo]
+            if valor_antigo != valor_novo:
+                dados_alterados[campo] = {'de': valor_antigo, 'para': valor_novo}
+                setattr(contador, campo, valor_novo)
+    
+    db.session.commit()
+    
+    # Log de auditoria
+    if dados_alterados:
+        log_action(current_user.id, 'UPDATE', 'CONTADOR', contador.id, dados_alterados)
+    
+    return jsonify({
+        "mensagem": "Contador atualizado com sucesso!",
+        "contador": contador.to_dict()
+    })
+
+@api_bp.route("/contadores/<int:contador_id>", methods=["DELETE"])
+@token_required
+def delete_contador(current_user, contador_id):
+    """Desativa um contador (soft delete - apenas admin)"""
+    if current_user.papel != 'ADMIN':
+        return jsonify({"erro": "Acesso negado. Apenas administradores podem excluir contadores."}), 403
+    
+    contador = Contador.query.get(contador_id)
+    if not contador:
+        return jsonify({"erro": "Contador não encontrado"}), 404
+    
+    # Soft delete
+    contador.ativo = False
+    db.session.commit()
+    
+    # Log de auditoria
+    log_action(current_user.id, 'DELETE', 'CONTADOR', contador.id, {
+        'nome': contador.nome,
+        'cpf': contador.cpf
+    })
+    
+    return jsonify({"mensagem": "Contador desativado com sucesso!"})
+
+# ==================== ROTAS DE RECIBO ====================
+
+@api_bp.route("/recibos", methods=["GET"])
+@token_required
+def get_recibos(current_user):
+    """Lista todos os recibos"""
+    recibos = Recibo.query.order_by(Recibo.data_emissao.desc()).all()
+    return jsonify([recibo.to_dict() for recibo in recibos])
+
+@api_bp.route("/recibos/<int:recibo_id>", methods=["GET"])
+@token_required
+def get_recibo(current_user, recibo_id):
+    """Busca um recibo específico com todos os dados relacionados"""
+    recibo = Recibo.query.get(recibo_id)
+    if not recibo:
+        return jsonify({"erro": "Recibo não encontrado"}), 404
+    return jsonify(recibo.to_dict())
+
+@api_bp.route("/recibos", methods=["POST"])
+@token_required
+def create_recibo(current_user):
+    """Cria um novo recibo"""
+    data = request.get_json()
+    
+    # Validação de campos obrigatórios
+    campos_obrigatorios = ['cliente_id', 'contador_id', 'mes', 'ano', 'valor', 'tipo_servico']
+    for campo in campos_obrigatorios:
+        if campo not in data:
+            return jsonify({"erro": f"O campo '{campo}' é obrigatório"}), 400
+    
+    # Validações
+    if data['tipo_servico'] not in ['honorarios', 'outros']:
+        return jsonify({"erro": "tipo_servico deve ser 'honorarios' ou 'outros'"}), 400
+    
+    if data['tipo_servico'] == 'outros' and not data.get('descricao_servico'):
+        return jsonify({"erro": "descricao_servico é obrigatório quando tipo_servico é 'outros'"}), 400
+    
+    # Verifica se cliente existe
+    cliente = Cliente.query.get(data['cliente_id'])
+    if not cliente:
+        return jsonify({"erro": "Cliente não encontrado"}), 404
+    
+    # Verifica se contador existe
+    contador = Contador.query.get(data['contador_id'])
+    if not contador:
+        return jsonify({"erro": "Contador não encontrado"}), 404
+    
+    # Gera número do recibo (formato: REC-YYYYMMDD-NNNN)
+    from datetime import datetime
+    hoje = datetime.now()
+    ultimo_recibo_hoje = Recibo.query.filter(
+        Recibo.numero_recibo.like(f"REC-{hoje.strftime('%Y%m%d')}-%")
+    ).order_by(Recibo.numero_recibo.desc()).first()
+    
+    if ultimo_recibo_hoje:
+        ultimo_numero = int(ultimo_recibo_hoje.numero_recibo.split('-')[-1])
+        proximo_numero = ultimo_numero + 1
+    else:
+        proximo_numero = 1
+    
+    numero_recibo = f"REC-{hoje.strftime('%Y%m%d')}-{proximo_numero:04d}"
+    
+    novo_recibo = Recibo(
+        cliente_id=data['cliente_id'],
+        contador_id=data['contador_id'],
+        mes=data['mes'],
+        ano=data['ano'],
+        valor=data['valor'],
+        tipo_servico=data['tipo_servico'],
+        descricao_servico=data.get('descricao_servico'),
+        numero_recibo=numero_recibo,
+        usuario_emitente_id=current_user.id
+    )
+    
+    db.session.add(novo_recibo)
+    db.session.commit()
+    
+    # Log de auditoria
+    log_action(current_user.id, 'CREATE', 'RECIBO', novo_recibo.id, {
+        'numero_recibo': numero_recibo,
+        'cliente': cliente.razao_social,
+        'valor': float(data['valor']),
+        'mes': data['mes'],
+        'ano': data['ano']
+    })
+    
+    return jsonify({
+        "mensagem": "Recibo criado com sucesso!",
+        "recibo": novo_recibo.to_dict()
+    }), 201
+
+# ==================== ROTAS DA LIXEIRA ====================
+
+@api_bp.route("/lixeira", methods=["GET"])
+@token_required
+def get_lixeira(current_user):
+    """Lista todos os itens na lixeira (não restaurados)"""
+    # Filtros opcionais
+    tipo_entidade = request.args.get('tipo_entidade')  # CLIENTE, PROCESSAMENTO, RECIBO
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 50))
+    
+    # Query base
+    query = ItemExcluido.query.filter_by(restaurado=False)
+    
+    # Aplicar filtro de tipo se fornecido
+    if tipo_entidade:
+        query = query.filter_by(tipo_entidade=tipo_entidade.upper())
+    
+    # Ordenar por data de exclusão (mais recentes primeiro)
+    query = query.order_by(ItemExcluido.data_exclusao.desc())
+    
+    # Paginação
+    itens_paginados = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return jsonify({
+        'itens': [item.to_dict() for item in itens_paginados.items],
+        'total': itens_paginados.total,
+        'pages': itens_paginados.pages,
+        'current_page': page,
+        'per_page': per_page
+    })
+
+@api_bp.route("/lixeira/<int:item_id>/restaurar", methods=["POST"])
+@token_required
+def restaurar_item(current_user, item_id):
+    """Restaura um item da lixeira"""
+    import json
+    
+    item = ItemExcluido.query.get(item_id)
+    if not item:
+        return jsonify({"erro": "Item não encontrado na lixeira"}), 404
+    
+    if item.restaurado:
+        return jsonify({"erro": "Este item já foi restaurado"}), 400
+    
+    try:
+        dados = json.loads(item.dados_json)
+        
+        # Restaurar conforme o tipo de entidade
+        if item.tipo_entidade == 'CLIENTE':
+            # Verificar se já existe um cliente com este CNPJ
+            if Cliente.query.filter_by(cnpj=dados.get('cnpj')).first():
+                return jsonify({"erro": "Já existe um cliente com este CNPJ cadastrado"}), 409
+            
+            # Criar novo cliente com os dados salvos
+            cliente_restaurado = Cliente(
+                razao_social=dados.get('razao_social'),
+                cnpj=dados.get('cnpj'),
+                regime_tributario=dados.get('regime_tributario'),
+                nome_fantasia=dados.get('nome_fantasia'),
+                data_abertura=dados.get('data_abertura'),
+                situacao_cadastral=dados.get('situacao_cadastral'),
+                data_situacao=dados.get('data_situacao'),
+                motivo_situacao=dados.get('motivo_situacao'),
+                natureza_juridica=dados.get('natureza_juridica'),
+                cnae_principal=dados.get('cnae_principal'),
+                cnae_secundarias=json.dumps(dados.get('cnae_secundarias', [])) if dados.get('cnae_secundarias') else None,
+                logradouro=dados.get('logradouro'),
+                numero=dados.get('numero'),
+                complemento=dados.get('complemento'),
+                bairro=dados.get('bairro'),
+                cep=dados.get('cep'),
+                municipio=dados.get('municipio'),
+                uf=dados.get('uf'),
+                telefone1=dados.get('telefone1'),
+                telefone2=dados.get('telefone2'),
+                email=dados.get('email'),
+                capital_social=dados.get('capital_social'),
+                porte=dados.get('porte'),
+                opcao_simples=dados.get('opcao_simples'),
+                data_opcao_simples=dados.get('data_opcao_simples'),
+                opcao_mei=dados.get('opcao_mei'),
+                data_exclusao_simples=dados.get('data_exclusao_simples'),
+                situacao_especial=dados.get('situacao_especial'),
+                data_situacao_especial=dados.get('data_situacao_especial'),
+                valor_honorarios=dados.get('valor_honorarios')
+            )
+            db.session.add(cliente_restaurado)
+            
+        elif item.tipo_entidade == 'PROCESSAMENTO':
+            return jsonify({"erro": "Restauração de processamentos ainda não implementada"}), 501
+            
+        elif item.tipo_entidade == 'RECIBO':
+            return jsonify({"erro": "Restauração de recibos ainda não implementada"}), 501
+        
+        else:
+            return jsonify({"erro": f"Tipo de entidade desconhecido: {item.tipo_entidade}"}), 400
+        
+        # Marcar item como restaurado
+        item.restaurado = True
+        item.data_restauracao = datetime.utcnow()
+        item.usuario_restauracao_id = current_user.id
+        
+        db.session.commit()
+        
+        # Log de auditoria
+        log_action(current_user.id, 'RESTORE', item.tipo_entidade, item_id, {
+            'entidade_id_original': item.entidade_id_original,
+            'tipo': item.tipo_entidade
+        })
+        
+        return jsonify({
+            "mensagem": f"{item.tipo_entidade} restaurado com sucesso!",
+            "item": item.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao restaurar item: {e}")
+        return jsonify({"erro": f"Erro ao restaurar item: {str(e)}"}), 500
+
+@api_bp.route("/lixeira/<int:item_id>", methods=["DELETE"])
+@token_required
+def deletar_permanente_item(current_user, item_id):
+    """Deleta permanentemente um item da lixeira"""
+    item = ItemExcluido.query.get(item_id)
+    if not item:
+        return jsonify({"erro": "Item não encontrado na lixeira"}), 404
+    
+    tipo = item.tipo_entidade
+    entidade_id = item.entidade_id_original
+    
+    db.session.delete(item)
+    db.session.commit()
+    
+    # Log de auditoria
+    log_action(current_user.id, 'DELETE_PERMANENT', tipo, entidade_id, {
+        'lixeira_id': item_id
+    })
+    
+    return jsonify({
+        "mensagem": "Item deletado permanentemente da lixeira"
+    }), 200
+
+@api_bp.route("/lixeira/tipos", methods=["GET"])
+@token_required
+def get_tipos_lixeira(current_user):
+    """Retorna os tipos de entidades disponíveis na lixeira"""
+    tipos = db.session.query(ItemExcluido.tipo_entidade).filter_by(restaurado=False).distinct().all()
+    return jsonify([tipo[0] for tipo in tipos])
