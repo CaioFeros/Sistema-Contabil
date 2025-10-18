@@ -90,3 +90,49 @@ export const deleteCliente = async (id) => {
         throw error;
     }
 };
+
+// ==================== FUNÇÕES DE BACKUP E RESTAURAÇÃO ====================
+
+/**
+ * Lista todos os backups de clientes disponíveis para restauração.
+ * @returns {Promise<Array>} Uma promessa que resolve para a lista de backups.
+ */
+export const getBackups = async () => {
+    try {
+        const response = await api.get('/backups');
+        return response.data;
+    } catch (error) {
+        console.error("Erro ao buscar backups:", error.response?.data?.erro || error.message);
+        throw error;
+    }
+};
+
+/**
+ * Obtém detalhes de um backup específico.
+ * @param {number} backupId - O ID do backup a ser buscado.
+ * @returns {Promise<object>} Uma promessa que resolve para os dados do backup.
+ */
+export const getBackupById = async (backupId) => {
+    try {
+        const response = await api.get(`/backups/${backupId}`);
+        return response.data;
+    } catch (error) {
+        console.error(`Erro ao buscar backup ${backupId}:`, error.response?.data?.erro || error.message);
+        throw error;
+    }
+};
+
+/**
+ * Restaura um cliente a partir de um backup.
+ * @param {number} backupId - O ID do backup a ser restaurado.
+ * @returns {Promise<object>} Uma promessa que resolve para os dados do cliente restaurado.
+ */
+export const restaurarCliente = async (backupId) => {
+    try {
+        const response = await api.post(`/backups/${backupId}/restaurar`);
+        return response.data;
+    } catch (error) {
+        console.error(`Erro ao restaurar cliente do backup ${backupId}:`, error.response?.data?.erro || error.message);
+        throw error;
+    }
+};

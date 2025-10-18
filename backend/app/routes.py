@@ -6,7 +6,10 @@ import requests
 from .models import db, Cliente, Processamento, FaturamentoDetalhe
 from sqlalchemy.orm import joinedload
 from .auth import token_required
-from .services import processar_arquivo_faturamento, gerar_relatorio_faturamento, calcular_imposto_simples_nacional
+from .services import (
+    processar_arquivo_faturamento, gerar_relatorio_faturamento, calcular_imposto_simples_nacional,
+    criar_backup_cliente, restaurar_cliente_do_backup, listar_backups_clientes, obter_backup_por_id
+)
 
 api_bp = Blueprint('api', __name__, url_prefix='/api') # Blueprint principal da API
 
@@ -86,6 +89,7 @@ def get_cliente(current_user, cliente_id):
 def delete_cliente(current_user, cliente_id):
     """
     Deleta um cliente e todos os seus dados relacionados (faturamentos e detalhes).
+    Cria um backup antes da exclusão para permitir restauração posterior.
     O cascade delete está configurado no modelo Processamento.
     """
     cliente = Cliente.query.get(cliente_id)
@@ -95,6 +99,10 @@ def delete_cliente(current_user, cliente_id):
     try:
         razao_social = cliente.razao_social
         cnpj = cliente.cnpj
+        
+        # Cria backup do cliente antes da exclusão
+        backup = criar_backup_cliente(cliente)
+        backup_id = backup.id
         
         # Busca e deleta todos os processamentos (que deletarão os detalhes em cascade)
         processamentos = Processamento.query.filter_by(cliente_id=cliente_id).all()
@@ -107,11 +115,13 @@ def delete_cliente(current_user, cliente_id):
         db.session.delete(cliente)
         db.session.commit()
         
-        current_app.logger.info(f"Cliente deletado: {razao_social} ({cnpj}) - {num_processamentos} processamentos removidos")
+        current_app.logger.info(f"Cliente deletado: {razao_social} ({cnpj}) - {num_processamentos} processamentos removidos - Backup ID: {backup_id}")
         
         return jsonify({
             "mensagem": f"Cliente '{razao_social}' deletado com sucesso!",
-            "processamentos_removidos": num_processamentos
+            "processamentos_removidos": num_processamentos,
+            "backup_id": backup_id,
+            "pode_restaurar": True
         }), 200
         
     except Exception as e:
@@ -906,3 +916,62 @@ def consolidar_csv(current_user):
         db.session.rollback()
         current_app.logger.error(f"Erro na consolidação: {str(e)}", exc_info=True)
         return jsonify({'erro': f"Erro ao consolidar dados: {str(e)}"}), 500
+
+
+# ==================== ROTAS DE BACKUP E RESTAURAÇÃO ====================
+
+@api_bp.route("/backups", methods=["GET"])
+@token_required
+def listar_backups(current_user):
+    """
+    Lista todos os backups de clientes disponíveis para restauração.
+    """
+    try:
+        backups = listar_backups_clientes()
+        return jsonify({
+            "backups": backups,
+            "total": len(backups)
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao listar backups: {e}", exc_info=True)
+        return jsonify({"erro": "Erro ao listar backups"}), 500
+
+
+@api_bp.route("/backups/<int:backup_id>", methods=["GET"])
+@token_required
+def obter_backup(current_user, backup_id):
+    """
+    Obtém detalhes de um backup específico.
+    """
+    try:
+        backup = obter_backup_por_id(backup_id)
+        if not backup:
+            return jsonify({"erro": "Backup não encontrado"}), 404
+            
+        return jsonify(backup), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao obter backup {backup_id}: {e}", exc_info=True)
+        return jsonify({"erro": "Erro ao obter backup"}), 500
+
+
+@api_bp.route("/backups/<int:backup_id>/restaurar", methods=["POST"])
+@token_required
+def restaurar_cliente(current_user, backup_id):
+    """
+    Restaura um cliente a partir de um backup.
+    """
+    try:
+        cliente_restaurado = restaurar_cliente_do_backup(backup_id)
+        
+        current_app.logger.info(f"Cliente restaurado do backup {backup_id}: {cliente_restaurado.razao_social} ({cliente_restaurado.cnpj})")
+        
+        return jsonify({
+            "mensagem": f"Cliente '{cliente_restaurado.razao_social}' restaurado com sucesso!",
+            "cliente": cliente_restaurado.to_dict()
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao restaurar cliente do backup {backup_id}: {e}", exc_info=True)
+        return jsonify({"erro": str(e)}), 400
