@@ -3,6 +3,7 @@ import { useClientes } from '../hooks/useClientes';
 import { useNavigate } from 'react-router-dom';
 import CNPJModal from '../components/CNPJModal';
 import AdicionarClienteModal from '../components/AdicionarClienteModal';
+import BackupManager from '../components/BackupManager';
 
 function GerenciarClientes() {
     const navigate = useNavigate();
@@ -10,6 +11,7 @@ function GerenciarClientes() {
     const [selectedCliente, setSelectedCliente] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdicionarModalOpen, setIsAdicionarModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' ou 'backups'
 
     const handleClienteClick = (cliente) => {
         setSelectedCliente(cliente);
@@ -35,6 +37,11 @@ function GerenciarClientes() {
 
     const handleClienteAdded = () => {
         refreshClientes(); // Recarrega a lista de clientes
+    };
+
+    const handleClienteRestaurado = (clienteRestaurado) => {
+        refreshClientes(); // Recarrega a lista de clientes
+        setActiveTab('clientes'); // Volta para a aba de clientes
     };
 
     if (loading) {
@@ -66,65 +73,101 @@ function GerenciarClientes() {
                 <h1 className="text-3xl font-bold text-foreground dark:text-dark-foreground">
                     Gerenciar Clientes
                 </h1>
-                <button 
-                    onClick={handleOpenAdicionarModal}
-                    className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all flex items-center space-x-2"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span>Adicionar Cliente</span>
-                </button>
+                {activeTab === 'clientes' && (
+                    <button 
+                        onClick={handleOpenAdicionarModal}
+                        className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all flex items-center space-x-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>Adicionar Cliente</span>
+                    </button>
+                )}
             </div>
 
-            <div className="bg-card dark:bg-dark-card rounded-xl shadow-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-border-default dark:divide-dark-border-default">
-                        <thead className="bg-background dark:bg-dark-card">
-                            <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                                    Razão Social
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                                    CNPJ
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                                    Regime Tributário
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                                    Ações
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border-default dark:divide-dark-border-default">
-                            {clientes.map((cliente) => (
-                                <tr 
-                                    key={cliente.id} 
-                                    className="hover:bg-background dark:hover:bg-dark-background transition-colors"
-                                >
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground dark:text-dark-foreground">
-                                        {cliente.razao_social}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted dark:text-slate-400">
-                                        {cliente.cnpj}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted">
-                                        {cliente.regime_tributario}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <button
-                                            onClick={() => handleClienteClick(cliente)}
-                                            className="text-primary hover:text-primary-hover font-medium transition-colors"
-                                        >
-                                            Ver Detalhes
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {/* Abas */}
+            <div className="mb-6">
+                <div className="border-b border-border dark:border-dark-border">
+                    <nav className="-mb-px flex space-x-8">
+                        <button
+                            onClick={() => setActiveTab('clientes')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                                activeTab === 'clientes'
+                                    ? 'border-primary text-primary dark:text-primary'
+                                    : 'border-transparent text-muted-foreground dark:text-dark-muted-foreground hover:text-foreground dark:hover:text-dark-foreground hover:border-border dark:hover:border-dark-border'
+                            }`}
+                        >
+                            Clientes Ativos ({clientes?.length || 0})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('backups')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                                activeTab === 'backups'
+                                    ? 'border-primary text-primary dark:text-primary'
+                                    : 'border-transparent text-muted-foreground dark:text-dark-muted-foreground hover:text-foreground dark:hover:text-dark-foreground hover:border-border dark:hover:border-dark-border'
+                            }`}
+                        >
+                            Clientes Excluídos
+                        </button>
+                    </nav>
                 </div>
             </div>
+
+            {activeTab === 'clientes' ? (
+                <div className="bg-card dark:bg-dark-card rounded-xl shadow-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-border-default dark:divide-dark-border-default">
+                            <thead className="bg-background dark:bg-dark-card">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                                        Razão Social
+                                    </th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                                        CNPJ
+                                    </th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                                        Regime Tributário
+                                    </th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                                        Ações
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border-default dark:divide-dark-border-default">
+                                {clientes.map((cliente) => (
+                                    <tr 
+                                        key={cliente.id} 
+                                        className="hover:bg-background dark:hover:bg-dark-background transition-colors"
+                                    >
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground dark:text-dark-foreground">
+                                            {cliente.razao_social}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted dark:text-slate-400">
+                                            {cliente.cnpj}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted">
+                                            {cliente.regime_tributario}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <button
+                                                onClick={() => handleClienteClick(cliente)}
+                                                className="text-primary hover:text-primary-hover font-medium transition-colors"
+                                            >
+                                                Ver Detalhes
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-card dark:bg-dark-card rounded-xl shadow-lg p-6">
+                    <BackupManager onClienteRestaurado={handleClienteRestaurado} />
+                </div>
+            )}
 
             {isModalOpen && selectedCliente && (
                 <CNPJModal 

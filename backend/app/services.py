@@ -3,7 +3,7 @@
 import pandas as pd
 from decimal import Decimal
 from datetime import datetime, timedelta
-from .models import db, Cliente, Processamento, FaturamentoDetalhe
+from .models import db, Cliente, Processamento, FaturamentoDetalhe, BackupCliente
 from sqlalchemy import func, and_
 
 
@@ -398,3 +398,162 @@ def gerar_relatorio_faturamento(params):
             response['notas_fiscais_mes'] = []
 
     return response
+
+
+def criar_backup_cliente(cliente):
+    """
+    Cria um backup de um cliente antes da exclusão.
+    
+    Args:
+        cliente: Objeto Cliente a ser feito backup
+        
+    Returns:
+        BackupCliente: Objeto de backup criado
+    """
+    try:
+        backup = BackupCliente(
+            cliente_id_original=cliente.id,
+            razao_social=cliente.razao_social,
+            cnpj=cliente.cnpj,
+            regime_tributario=cliente.regime_tributario,
+            nome_fantasia=cliente.nome_fantasia,
+            data_abertura=cliente.data_abertura,
+            situacao_cadastral=cliente.situacao_cadastral,
+            data_situacao=cliente.data_situacao,
+            motivo_situacao=cliente.motivo_situacao,
+            natureza_juridica=cliente.natureza_juridica,
+            cnae_principal=cliente.cnae_principal,
+            cnae_secundarias=cliente.cnae_secundarias,
+            logradouro=cliente.logradouro,
+            numero=cliente.numero,
+            complemento=cliente.complemento,
+            bairro=cliente.bairro,
+            cep=cliente.cep,
+            municipio=cliente.municipio,
+            uf=cliente.uf,
+            telefone1=cliente.telefone1,
+            telefone2=cliente.telefone2,
+            email=cliente.email,
+            capital_social=cliente.capital_social,
+            porte=cliente.porte,
+            opcao_simples=cliente.opcao_simples,
+            data_opcao_simples=cliente.data_opcao_simples,
+            opcao_mei=cliente.opcao_mei,
+            data_exclusao_simples=cliente.data_exclusao_simples,
+            situacao_especial=cliente.situacao_especial,
+            data_situacao_especial=cliente.data_situacao_especial
+        )
+        
+        db.session.add(backup)
+        db.session.commit()
+        
+        return backup
+        
+    except Exception as e:
+        db.session.rollback()
+        raise Exception(f"Erro ao criar backup do cliente: {str(e)}")
+
+
+def restaurar_cliente_do_backup(backup_id):
+    """
+    Restaura um cliente a partir de um backup.
+    
+    Args:
+        backup_id: ID do backup a ser restaurado
+        
+    Returns:
+        Cliente: Cliente restaurado
+    """
+    try:
+        backup = BackupCliente.query.get(backup_id)
+        
+        if not backup:
+            raise Exception("Backup não encontrado")
+            
+        if backup.restaurado:
+            raise Exception("Este backup já foi restaurado anteriormente")
+        
+        # Verificar se já existe um cliente com o mesmo CNPJ
+        cliente_existente = Cliente.query.filter_by(cnpj=backup.cnpj).first()
+        if cliente_existente:
+            raise Exception("Já existe um cliente ativo com este CNPJ")
+        
+        # Criar novo cliente com os dados do backup
+        cliente_restaurado = Cliente(
+            razao_social=backup.razao_social,
+            cnpj=backup.cnpj,
+            regime_tributario=backup.regime_tributario,
+            nome_fantasia=backup.nome_fantasia,
+            data_abertura=backup.data_abertura,
+            situacao_cadastral=backup.situacao_cadastral,
+            data_situacao=backup.data_situacao,
+            motivo_situacao=backup.motivo_situacao,
+            natureza_juridica=backup.natureza_juridica,
+            cnae_principal=backup.cnae_principal,
+            cnae_secundarias=backup.cnae_secundarias,
+            logradouro=backup.logradouro,
+            numero=backup.numero,
+            complemento=backup.complemento,
+            bairro=backup.bairro,
+            cep=backup.cep,
+            municipio=backup.municipio,
+            uf=backup.uf,
+            telefone1=backup.telefone1,
+            telefone2=backup.telefone2,
+            email=backup.email,
+            capital_social=backup.capital_social,
+            porte=backup.porte,
+            opcao_simples=backup.opcao_simples,
+            data_opcao_simples=backup.data_opcao_simples,
+            opcao_mei=backup.opcao_mei,
+            data_exclusao_simples=backup.data_exclusao_simples,
+            situacao_especial=backup.situacao_especial,
+            data_situacao_especial=backup.data_situacao_especial
+        )
+        
+        db.session.add(cliente_restaurado)
+        
+        # Marcar backup como restaurado
+        backup.restaurado = True
+        backup.data_restauracao = datetime.now()
+        
+        db.session.commit()
+        
+        return cliente_restaurado
+        
+    except Exception as e:
+        db.session.rollback()
+        raise Exception(f"Erro ao restaurar cliente do backup: {str(e)}")
+
+
+def listar_backups_clientes():
+    """
+    Lista todos os backups de clientes disponíveis para restauração.
+    
+    Returns:
+        list: Lista de backups não restaurados
+    """
+    try:
+        backups = BackupCliente.query.filter_by(restaurado=False).order_by(BackupCliente.data_exclusao.desc()).all()
+        return [backup.to_dict() for backup in backups]
+        
+    except Exception as e:
+        raise Exception(f"Erro ao listar backups: {str(e)}")
+
+
+def obter_backup_por_id(backup_id):
+    """
+    Obtém um backup específico por ID.
+    
+    Args:
+        backup_id: ID do backup
+        
+    Returns:
+        BackupCliente: Backup encontrado ou None
+    """
+    try:
+        backup = BackupCliente.query.get(backup_id)
+        return backup.to_dict() if backup else None
+        
+    except Exception as e:
+        raise Exception(f"Erro ao obter backup: {str(e)}")
