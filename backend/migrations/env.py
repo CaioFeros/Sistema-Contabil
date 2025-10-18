@@ -2,12 +2,37 @@ import logging
 from logging.config import fileConfig
 
 from flask import current_app
+import os
+import sys
 
 from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+
+# Garantir contexto da aplicação Flask quando Alembic é chamado via CLI direto
+def _ensure_flask_app_context():
+    try:
+        # Se já há um app context, não faz nada
+        _ = current_app.config  # type: ignore[attr-defined]
+        return
+    except Exception:
+        pass
+
+    # Adiciona a raiz do projeto ao sys.path para importar backend.app
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    # Cria a aplicação e empurra o app context
+    from backend.app import create_app  # type: ignore
+    app = create_app()
+    app.app_context().push()
+
+
+_ensure_flask_app_context()
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
