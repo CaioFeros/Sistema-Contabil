@@ -4,6 +4,8 @@ import jwt
 from datetime import datetime
 import requests
 from .models import db, Cliente, Processamento, FaturamentoDetalhe
+import os
+import json
 from sqlalchemy.orm import joinedload
 from .auth import token_required
 from .services import processar_arquivo_faturamento, gerar_relatorio_faturamento, calcular_imposto_simples_nacional
@@ -96,8 +98,40 @@ def delete_cliente(current_user, cliente_id):
         razao_social = cliente.razao_social
         cnpj = cliente.cnpj
         
-        # Busca e deleta todos os processamentos (que deletarão os detalhes em cascade)
+        # Backup antes de excluir: cliente + processamentos + detalhes
+        backup_payload = {
+            'cliente': cliente.to_dict(),
+            'processamentos': []
+        }
         processamentos = Processamento.query.filter_by(cliente_id=cliente_id).all()
+        for proc in processamentos:
+            detalhes = FaturamentoDetalhe.query.filter_by(processamento_id=proc.id).all()
+            backup_payload['processamentos'].append({
+                'id': proc.id,
+                'cliente_id': proc.cliente_id,
+                'mes': proc.mes,
+                'ano': proc.ano,
+                'faturamento_total': float(proc.faturamento_total),
+                'imposto_calculado': float(proc.imposto_calculado),
+                'nome_arquivo_original': proc.nome_arquivo_original,
+                'data_processamento': proc.data_processamento.isoformat() if proc.data_processamento else None,
+                'detalhes': [
+                    {
+                        'descricao_servico': d.descricao_servico,
+                        'valor': float(d.valor)
+                    } for d in detalhes
+                ]
+            })
+        
+        backups_dir = current_app.config.get('BACKUPS_DIR', 'backups')
+        os.makedirs(backups_dir, exist_ok=True)
+        backup_filename = f"cliente_{cliente_id}_backup.json"
+        backup_path = os.path.join(backups_dir, backup_filename)
+        with open(backup_path, 'w', encoding='utf-8') as f:
+            json.dump(backup_payload, f, ensure_ascii=False, indent=2)
+        
+        # Busca e deleta todos os processamentos (que deletarão os detalhes em cascade)
+        processamentos = processamentos  # já buscados para backup
         num_processamentos = len(processamentos)
         
         for proc in processamentos:

@@ -19,9 +19,11 @@ def create_app():
     # Carrega a configuração a partir de variáveis de ambiente
     # Garante que as variáveis de ambiente sejam carregadas antes de serem usadas.
     # A chamada a load_dotenv() deve estar no seu arquivo de entrada (ex: run.py)
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    # DATABASE_URL pode não estar definido quando rodando CLI do Alembic
+    # Define fallback local para facilitar migrações em ambiente de desenvolvimento
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'sqlite:///app.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY') or 'dev-secret-key'
 
     # Configura o CORS de forma flexível
     frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
@@ -30,6 +32,9 @@ def create_app():
     # Inicializa as extensões com a aplicação
     db.init_app(app)
     migrate.init_app(app, db)
+
+    # Diretório de backups (para restauração de exclusões no futuro)
+    app.config['BACKUPS_DIR'] = os.environ.get('BACKUPS_DIR') or 'backups'
 
     # Registra os Blueprints com prefixo de URL
     app.register_blueprint(auth_bp)
