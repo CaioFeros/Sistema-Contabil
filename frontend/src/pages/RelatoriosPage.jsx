@@ -26,7 +26,7 @@ function RelatoriosPage() {
             >
                 &larr; Voltar à página anterior
             </button>
-            <h1 className="text-2xl font-bold mb-6 text-foreground dark:text-dark-foreground">Relatório Anual de Faturamento</h1>
+            <h1 className="text-2xl font-bold mb-6 text-foreground dark:text-dark-foreground">Relatório Anual de Faturamento - TESTE</h1>
 
             {/* Seção de Filtros */}
             <div className="print:hidden">

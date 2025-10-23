@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getClienteById, updateCliente, consultarCNPJ, deleteCliente } from '../services/clienteApi';
+import GerenciarSocios from './GerenciarSocios';
 
 // Componente InputField definido fora para evitar perda de foco
 const InputField = ({ label, value, field, type = 'text', readOnly = false, onChange, disabled }) => (
@@ -613,7 +614,14 @@ function CNPJModal({ cliente, onClose, onClienteDeleted }) {
                         </div>
                     </div>
 
-                    {/* Seção 8: Opções Fiscais */}
+                    {/* Seção 8: Sócios da Empresa */}
+                    <GerenciarSocios 
+                        empresaId={cliente.id}
+                        empresaNome={dadosCNPJ.razaoSocial}
+                        isEditing={isEditing}
+                    />
+
+                    {/* Seção 9: Opções Fiscais */}
                     <div className="mb-6">
                         <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-4 pb-2 border-b-2 border-blue-600">
                             Opções Fiscais
