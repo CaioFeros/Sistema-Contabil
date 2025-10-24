@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Users, FileText, History, Receipt, UserCog, Search } from 'lucide-react';
+import { Shield, Users, FileText, History, Receipt, UserCog, Search, BarChart3 } from 'lucide-react';
 
 const NavButton = ({ to, children }) => (
     <Link
@@ -94,6 +94,12 @@ function DashboardPage() {
                     <div className="flex flex-col items-center gap-2">
                         <FileText className="w-8 h-8" />
                         <span>Contratos</span>
+                    </div>
+                </NavButton>
+                <NavButton to="/app/ferramenta-relatorios">
+                    <div className="flex flex-col items-center gap-2">
+                        <BarChart3 className="w-8 h-8" />
+                        <span>Ferramenta de Criação de Relatórios</span>
                     </div>
                 </NavButton>
                 {isAdmin && (

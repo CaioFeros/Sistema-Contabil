@@ -5,8 +5,15 @@
 # Dependências do Python
 venv/
 .venv/
+env/
+ENV/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
 
 # Dependências do Node.js
 frontend/node_modules/
@@ -23,15 +30,34 @@ frontend/yarn-error.log*
 # Build do frontend para produção
 backend/frontend_build/
 
-# Banco de dados SQLite
+# Banco de dados SQLite - NUNCA incluir dados reais!
 *.db
 *.sqlite
 *.sqlite3
+backend/sistema_contabil.db
+instance/
 
 # Arquivos de IDE
 .idea/
+.vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.DS_Store
+
+# Logs e temporários
+*.log
+*.tmp
+*.temp
+.cursor/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Alembic
+*.pyc
+__pycache__

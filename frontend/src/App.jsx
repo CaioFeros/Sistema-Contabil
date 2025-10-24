@@ -14,6 +14,7 @@ import GerenciarContador from './pages/GerenciarContador';
 import EmissaoRecibo from './pages/EmissaoRecibo';
 import ConsultaCNAE from './pages/ConsultaCNAE';
 import ContratosPage from './pages/ContratosPage';
+import FerramentaRelatoriosPage from './pages/FerramentaRelatoriosPage';
 import { ThemeProvider } from './context/ThemeContext';
 
  
@@ -48,6 +49,7 @@ function App() {
             <Route path="gerenciar-contador" element={<GerenciarContador />} />
             <Route path="cnae" element={<ConsultaCNAE />} />
             <Route path="contratos" element={<ContratosPage />} />
+            <Route path="ferramenta-relatorios" element={<FerramentaRelatoriosPage />} />
             
                 {/* Rotas de Administração */}
                 <Route path="admin/usuarios" element={<GerenciarUsuarios />} />

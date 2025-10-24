@@ -4,7 +4,7 @@ Permite salvar e restaurar itens excluídos
 """
 import json
 from datetime import datetime
-from .models import db, ItemExcluido, Cliente, Processamento, FaturamentoDetalhe, Recibo, Contador
+from .models import db, ItemExcluido, Cliente, Processamento, FaturamentoDetalhe, Recibo, Contador, Contrato
 
 
 def salvar_na_lixeira(tipo_entidade, entidade_obj, usuario_id, motivo=None):
@@ -104,6 +104,8 @@ def serializar_entidade(tipo_entidade, entidade_obj):
         return serializar_processamento(entidade_obj)
     elif tipo_entidade == 'RECIBO':
         return serializar_recibo(entidade_obj)
+    elif tipo_entidade == 'CONTRATO':
+        return serializar_contrato(entidade_obj)
     else:
         # Fallback: tentar usar to_dict() se existir
         if hasattr(entidade_obj, 'to_dict'):
@@ -186,6 +188,11 @@ def serializar_recibo(recibo):
         'data_emissao': recibo.data_emissao.isoformat() if recibo.data_emissao else None,
         'usuario_emitente_id': recibo.usuario_emitente_id
     }
+
+
+def serializar_contrato(contrato):
+    """Serializa um contrato"""
+    return contrato.to_dict()
 
 
 def restaurar_cliente(dados):
